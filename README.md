@@ -27,6 +27,13 @@ npm run start
 
 Abrir: `http://localhost:3000`
 
+## Execucao com Docker
+
+```powershell
+docker build -t pib-smj:local .
+docker run --rm -p 3000:3000 -e DATABASE_URL="mariadb://usuario:senha@host-remoto:3306/nome_banco" pib-smj:local
+```
+
 ## Fluxo da tela
 
 1. Preencher ou colar linhas na grade da `cadlan2`.
