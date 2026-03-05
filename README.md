@@ -37,13 +37,15 @@ docker run --rm -p 3000:3000 -e DATABASE_URL="mariadb://usuario:senha@host-remot
 ## Fluxo da tela
 
 1. Preencher ou colar linhas na grade da `cadlan2`.
-2. Usar os combobox/lookups para:
+2. Opcional: clicar em `Importar OFX` para carregar o extrato bancario.
+3. Usar os combobox/lookups para:
    - `lan_idmem` (membro ativo)
    - `lan_lanope` (plano/tipo de operacao)
    - `lan_idmin` (ministerio)
-3. Clicar em `Salvar na cadlan2`.
-4. Conferir os dados.
-5. Clicar em `Confirmar e enviar para cadlan` para copiar tudo em lote e limpar a `cadlan2`.
+4. Conferir as colunas auxiliares do extrato (`aux_extrato_desc`, `aux_extrato_dc`) e preencher `lan_deslan`.
+5. Clicar em `Salvar na cadlan2`.
+6. Conferir os dados.
+7. Clicar em `Confirmar e enviar para cadlan` para copiar tudo em lote e limpar a `cadlan2`.
 
 ## Estrutura preparada para expansao
 

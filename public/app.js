@@ -125,6 +125,23 @@ function createGrid(lookups, rows) {
         headerFilter: "input",
       },
       {
+        title: "lan_datlan",
+        field: "lan_datlan",
+        editor: "date",
+      },
+      {
+        title: "aux_extrato_dc",
+        field: "aux_extrato_dc",
+        width: 130,
+        hozAlign: "center",
+      },
+      {
+        title: "aux_extrato_desc",
+        field: "aux_extrato_desc",
+        widthGrow: 2,
+        headerFilter: "input",
+      },
+      {
         title: "lan_deslan",
         field: "lan_deslan",
         editor: "input",
@@ -137,11 +154,6 @@ function createGrid(lookups, rows) {
         editor: "input",
         hozAlign: "right",
         formatter: (cell) => formatMoney(cell.getValue()),
-      },
-      {
-        title: "lan_datlan",
-        field: "lan_datlan",
-        editor: "date",
       },
       {
         title: "lan_lanope",
@@ -224,6 +236,147 @@ function isIsoDate(value) {
 
   const parsed = new Date(`${text}T00:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
+}
+
+function parseOfxAmount(value) {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) {
+    return Number.NaN;
+  }
+
+  let normalized = rawValue.replace(/\s/g, "");
+  const lastComma = normalized.lastIndexOf(",");
+  const lastDot = normalized.lastIndexOf(".");
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) {
+      normalized = normalized.replace(/\./g, "").replace(",", ".");
+    } else {
+      normalized = normalized.replace(/,/g, "");
+    }
+  } else if (lastComma >= 0) {
+    normalized = normalized.replace(",", ".");
+  }
+
+  return Number(normalized);
+}
+
+function parseOfxDate(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length < 8) {
+    return "";
+  }
+
+  const isoDate = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return isIsoDate(isoDate) ? isoDate : "";
+}
+
+function extractTagValue(block, tagName) {
+  const closedTagRegex = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i");
+  const closedTagMatch = block.match(closedTagRegex);
+  if (closedTagMatch && closedTagMatch[1]) {
+    return closedTagMatch[1].trim();
+  }
+
+  const openTagRegex = new RegExp(`<${tagName}>([^\\n\\r<]+)`, "i");
+  const openTagMatch = block.match(openTagRegex);
+  if (openTagMatch && openTagMatch[1]) {
+    return openTagMatch[1].trim();
+  }
+
+  return "";
+}
+
+function deriveDebitCredit(trnType, amount) {
+  if (Number.isFinite(amount)) {
+    if (amount < 0) {
+      return "D";
+    }
+    if (amount > 0) {
+      return "C";
+    }
+  }
+
+  const normalizedType = String(trnType || "").trim().toUpperCase();
+  const debitTypes = new Set(["DEBIT", "PAYMENT", "ATM", "POS", "FEE", "CHECK"]);
+  const creditTypes = new Set(["CREDIT", "DEP", "DIRECTDEP", "INT", "DIV"]);
+
+  if (debitTypes.has(normalizedType)) {
+    return "D";
+  }
+  if (creditTypes.has(normalizedType)) {
+    return "C";
+  }
+
+  return "";
+}
+
+function buildOfxDescription(transactionBlock) {
+  const name = extractTagValue(transactionBlock, "NAME");
+  const memo = extractTagValue(transactionBlock, "MEMO");
+  const fitId = extractTagValue(transactionBlock, "FITID");
+
+  if (name && memo && name !== memo) {
+    return `${name} | ${memo}`.slice(0, 300);
+  }
+  if (memo) {
+    return memo.slice(0, 300);
+  }
+  if (name) {
+    return name.slice(0, 300);
+  }
+  if (fitId) {
+    return fitId.slice(0, 300);
+  }
+
+  return "";
+}
+
+function parseOfxTransactions(ofxText) {
+  const normalizedOfx = String(ofxText || "").replace(/\r\n/g, "\n");
+  const transactionMatches = [...normalizedOfx.matchAll(/<STMTTRN>([\s\S]*?)(?=<STMTTRN>|<\/BANKTRANLIST>|$)/gi)];
+
+  return transactionMatches
+    .map((match) => {
+      const transactionBlock = match[1];
+      const amount = parseOfxAmount(extractTagValue(transactionBlock, "TRNAMT"));
+      const trnType = extractTagValue(transactionBlock, "TRNTYPE");
+      const postedDate = extractTagValue(transactionBlock, "DTPOSTED");
+      const userDate = extractTagValue(transactionBlock, "DTUSER");
+      const date = parseOfxDate(postedDate || userDate);
+      const description = buildOfxDescription(transactionBlock);
+
+      if (!Number.isFinite(amount) || amount === 0) {
+        return null;
+      }
+
+      return {
+        lan_idmem: "",
+        lan_deslan: "",
+        lan_valor: Number(Math.abs(amount).toFixed(2)),
+        lan_datlan: date,
+        lan_lanope: "",
+        lan_idmin: "",
+        aux_extrato_desc: description,
+        aux_extrato_dc: deriveDebitCredit(trnType, amount),
+      };
+    })
+    .filter((item) => Boolean(item));
+}
+
+async function readTextFileWithFallback(file) {
+  const buffer = await file.arrayBuffer();
+  const utf8Text = new TextDecoder("utf-8").decode(buffer);
+
+  if (!utf8Text.includes("\ufffd")) {
+    return utf8Text;
+  }
+
+  try {
+    return new TextDecoder("windows-1252").decode(buffer);
+  } catch (error) {
+    return utf8Text;
+  }
 }
 
 function collectRowsForSave() {
@@ -341,6 +494,8 @@ function handleAddRow() {
       lan_datlan: "",
       lan_lanope: "",
       lan_idmin: "",
+      aux_extrato_desc: "",
+      aux_extrato_dc: "",
     },
     true
   );
@@ -404,18 +559,58 @@ async function handleCommit() {
   }
 }
 
+function handleImportClick() {
+  const fileInput = state.controls.ofxFile;
+  fileInput.value = "";
+  fileInput.click();
+}
+
+async function handleImportFileSelected(event) {
+  const [file] = event.target.files || [];
+  if (!file) {
+    return;
+  }
+
+  setBusy(true);
+  setStatus(`Importando arquivo ${file.name}...`);
+
+  try {
+    const fileText = await readTextFileWithFallback(file);
+    const importedRows = parseOfxTransactions(fileText);
+
+    if (importedRows.length === 0) {
+      throw new Error("Nenhum lancamento valido foi encontrado no OFX.");
+    }
+
+    await state.table.addData(importedRows, false);
+    setStatus(
+      `${importedRows.length} lancamento(s) importado(s). Preencha lan_deslan e demais campos obrigatorios antes de salvar.`,
+      "success"
+    );
+  } catch (error) {
+    setStatus(error.message, "error");
+  } finally {
+    setBusy(false);
+    event.target.value = "";
+  }
+}
+
 function bindControls() {
   state.controls.reload = document.getElementById("reloadButton");
+  state.controls.import = document.getElementById("importButton");
   state.controls.add = document.getElementById("addButton");
   state.controls.remove = document.getElementById("removeButton");
   state.controls.save = document.getElementById("saveButton");
   state.controls.commit = document.getElementById("commitButton");
+  state.controls.ofxFile = document.getElementById("ofxFileInput");
 
   state.controls.reload.addEventListener("click", handleReload);
+  state.controls.import.addEventListener("click", handleImportClick);
   state.controls.add.addEventListener("click", handleAddRow);
   state.controls.remove.addEventListener("click", handleDeleteRows);
   state.controls.save.addEventListener("click", handleSave);
   state.controls.commit.addEventListener("click", handleCommit);
+  state.controls.ofxFile.addEventListener("change", handleImportFileSelected);
 }
 
 async function initialize() {

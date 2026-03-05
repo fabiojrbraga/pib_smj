@@ -30,6 +30,7 @@
       <section class="panel">
         <div class="toolbar">
           <button id="reloadButton" class="btn btn-secondary" type="button">Recarregar</button>
+          <button id="importButton" class="btn btn-secondary" type="button">Importar OFX</button>
           <button id="addButton" class="btn btn-secondary" type="button">Nova linha</button>
           <button id="removeButton" class="btn btn-secondary" type="button">Excluir selecionadas</button>
           <button id="saveButton" class="btn btn-primary" type="button">Salvar na cadlan2</button>
@@ -38,6 +39,7 @@
           </button>
         </div>
 
+        <input id="ofxFileInput" class="hidden-file-input" type="file" accept=".ofx,.qfx,text/plain" />
         <div id="statusBar" class="status">Carregando dados...</div>
         <div id="grid"></div>
       </section>

@@ -87,6 +87,10 @@ h1 {
   margin-bottom: 12px;
 }
 
+.hidden-file-input {
+  display: none;
+}
+
 .btn {
   border: 0;
   border-radius: 12px;
