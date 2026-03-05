@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manutenção Financeira - cadlan2</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://unpkg.com/tabulator-tables@6.3.0/dist/css/tabulator.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">Financeiro</p>
+        <h1>Grid de manutenção da tabela cadlan2</h1>
+        <p class="subtitle">
+          Preencha, valide e confirme os lançamentos antes do envio definitivo para a tabela
+          <strong>cadlan</strong>.
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <button id="reloadButton" class="btn btn-secondary" type="button">Recarregar</button>
+          <button id="addButton" class="btn btn-secondary" type="button">Nova linha</button>
+          <button id="removeButton" class="btn btn-secondary" type="button">Excluir selecionadas</button>
+          <button id="saveButton" class="btn btn-primary" type="button">Salvar na cadlan2</button>
+          <button id="commitButton" class="btn btn-warning" type="button">
+            Confirmar e enviar para cadlan
+          </button>
+        </div>
+
+        <div id="statusBar" class="status">Carregando dados...</div>
+        <div id="grid"></div>
+      </section>
+    </main>
+
+    <script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

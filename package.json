@@ -1,0 +1,24 @@
+﻿{
+  "name": "pib-smj",
+  "version": "1.0.0",
+  "description": "Manutenção financeira cadlan2/cadlan",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "check": "node --check src/server.js"
+  },
+  "keywords": [
+    "mariadb",
+    "financeiro",
+    "igreja"
+  ],
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "mysql2": "^3.15.3",
+    "zod": "^3.24.2"
+  }
+}

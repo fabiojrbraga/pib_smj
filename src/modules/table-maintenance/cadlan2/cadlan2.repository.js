@@ -1,0 +1,165 @@
+const { pool } = require("../../../db/pool");
+const { withTransaction } = require("../../../db/transaction");
+
+async function listCadlan2(db = pool) {
+  const [rows] = await db.query(
+    `
+      SELECT
+        id,
+        lan_idmem,
+        lan_deslan,
+        lan_valor,
+        DATE_FORMAT(lan_datlan, '%Y-%m-%d') AS lan_datlan,
+        lan_lanope,
+        lan_idmin
+      FROM cadlan2
+      ORDER BY id
+    `
+  );
+
+  return rows;
+}
+
+async function validateForeignKeys(rows, db = pool) {
+  const memberIds = [...new Set(rows.map((item) => item.lan_idmem))];
+  const operationIds = [...new Set(rows.map((item) => item.lan_lanope))];
+  const ministryIds = [...new Set(rows.map((item) => item.lan_idmin))];
+
+  const [memberRows] = await db.query(`SELECT id FROM cadmem WHERE id IN (?)`, [memberIds]);
+  const [operationRows] = await db.query(`SELECT id FROM cadope WHERE id IN (?)`, [operationIds]);
+  const [ministryRows] = await db.query(`SELECT id FROM cadmin WHERE id IN (?)`, [ministryIds]);
+
+  const memberSet = new Set(memberRows.map((item) => item.id));
+  const operationSet = new Set(operationRows.map((item) => item.id));
+  const ministrySet = new Set(ministryRows.map((item) => item.id));
+
+  const missingMembers = memberIds.filter((id) => !memberSet.has(id));
+  const missingOperations = operationIds.filter((id) => !operationSet.has(id));
+  const missingMinistries = ministryIds.filter((id) => !ministrySet.has(id));
+
+  return {
+    missingMembers,
+    missingOperations,
+    missingMinistries,
+  };
+}
+
+async function replaceCadlan2Batch(rows) {
+  return withTransaction(async (connection) => {
+    await connection.query("DELETE FROM cadlan2");
+
+    const values = rows.map((item) => [
+      item.lan_idmem,
+      item.lan_deslan,
+      item.lan_valor,
+      item.lan_datlan,
+      item.lan_lanope,
+      item.lan_idmin,
+    ]);
+
+    await connection.query(
+      `
+        INSERT INTO cadlan2 (
+          lan_idmem,
+          lan_deslan,
+          lan_valor,
+          lan_datlan,
+          lan_lanope,
+          lan_idmin
+        ) VALUES ?
+      `,
+      [values]
+    );
+
+    const [resultRows] = await connection.query("SELECT COUNT(*) AS total FROM cadlan2");
+    return resultRows[0].total;
+  });
+}
+
+async function validateCadlan2DatabaseRows(db = pool) {
+  const [countRows] = await db.query("SELECT COUNT(*) AS total FROM cadlan2");
+  const totalRows = countRows[0].total;
+
+  if (totalRows === 0) {
+    return {
+      totalRows: 0,
+      missingMembers: [],
+      missingOperations: [],
+      missingMinistries: [],
+    };
+  }
+
+  const [missingMembersRows] = await db.query(
+    `
+      SELECT DISTINCT c2.lan_idmem AS id
+      FROM cadlan2 c2
+      LEFT JOIN cadmem cm ON cm.id = c2.lan_idmem
+      WHERE cm.id IS NULL
+      ORDER BY c2.lan_idmem
+    `
+  );
+
+  const [missingOperationsRows] = await db.query(
+    `
+      SELECT DISTINCT c2.lan_lanope AS id
+      FROM cadlan2 c2
+      LEFT JOIN cadope co ON co.id = c2.lan_lanope
+      WHERE co.id IS NULL
+      ORDER BY c2.lan_lanope
+    `
+  );
+
+  const [missingMinistriesRows] = await db.query(
+    `
+      SELECT DISTINCT c2.lan_idmin AS id
+      FROM cadlan2 c2
+      LEFT JOIN cadmin ci ON ci.id = c2.lan_idmin
+      WHERE ci.id IS NULL
+      ORDER BY c2.lan_idmin
+    `
+  );
+
+  return {
+    totalRows,
+    missingMembers: missingMembersRows.map((item) => item.id),
+    missingOperations: missingOperationsRows.map((item) => item.id),
+    missingMinistries: missingMinistriesRows.map((item) => item.id),
+  };
+}
+
+async function commitCadlan2ToCadlan() {
+  return withTransaction(async (connection) => {
+    const [result] = await connection.query(
+      `
+        INSERT INTO cadlan (
+          lan_idmem,
+          lan_deslan,
+          lan_valor,
+          lan_datlan,
+          lan_lanope,
+          lan_idmin
+        )
+        SELECT
+          lan_idmem,
+          lan_deslan,
+          lan_valor,
+          lan_datlan,
+          lan_lanope,
+          lan_idmin
+        FROM cadlan2
+        ORDER BY id
+      `
+    );
+
+    await connection.query("DELETE FROM cadlan2");
+    return result.affectedRows;
+  });
+}
+
+module.exports = {
+  listCadlan2,
+  validateForeignKeys,
+  replaceCadlan2Batch,
+  validateCadlan2DatabaseRows,
+  commitCadlan2ToCadlan,
+};

@@ -1,0 +1,40 @@
+const service = require("./cadlan2.service");
+
+async function listRows(req, res, next) {
+  try {
+    const rows = await service.getCadlan2Rows();
+    res.json({ rows });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function saveBatch(req, res, next) {
+  try {
+    const result = await service.saveCadlan2Batch(req.body);
+    res.json({
+      message: "cadlan2 atualizada com sucesso.",
+      total: result.total,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function commitBatch(req, res, next) {
+  try {
+    const result = await service.commitCadlan2Batch();
+    res.json({
+      message: "Registros enviados para cadlan com sucesso.",
+      insertedRows: result.insertedRows,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = {
+  listRows,
+  saveBatch,
+  commitBatch,
+};
