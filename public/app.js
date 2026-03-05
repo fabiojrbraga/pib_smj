@@ -83,19 +83,97 @@ function formatMoney(value) {
   });
 }
 
+function normalizeDebitCreditCode(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "D" || normalized === "C") {
+    return normalized;
+  }
+  return "";
+}
+
+function buildOperationTypeMap(operations) {
+  return new Map(
+    operations.map((item) => [Number(item.id), normalizeDebitCreditCode(item.type)])
+  );
+}
+
+function buildOperationOptionGroups(operations) {
+  const debitOperations = operations.filter(
+    (item) => normalizeDebitCreditCode(item.type) === "D"
+  );
+  const creditOperations = operations.filter(
+    (item) => normalizeDebitCreditCode(item.type) === "C"
+  );
+
+  return {
+    all: buildLookupOptions(operations),
+    debit: buildLookupOptions(debitOperations),
+    credit: buildLookupOptions(creditOperations),
+  };
+}
+
+function getOperationOptionsForRow(optionGroups, debitCreditCode) {
+  if (debitCreditCode === "D") {
+    return optionGroups.debit.length > 0 ? optionGroups.debit : optionGroups.all;
+  }
+
+  if (debitCreditCode === "C") {
+    return optionGroups.credit.length > 0 ? optionGroups.credit : optionGroups.all;
+  }
+
+  return optionGroups.all;
+}
+
+function resolveDebitCreditForRow(row, operationTypeMap) {
+  const fromExtract = normalizeDebitCreditCode(row.aux_extrato_dc);
+  if (fromExtract) {
+    return fromExtract;
+  }
+
+  const operationId = Number(row.lan_lanope);
+  if (!Number.isInteger(operationId) || operationId <= 0) {
+    return "";
+  }
+
+  return normalizeDebitCreditCode(operationTypeMap.get(operationId));
+}
+
+function calculateSignedTotalForRows(rows, operationTypeMap) {
+  return rows.reduce((accumulator, row) => {
+    const amount = parseMoneyInput(row.lan_valor);
+    if (!Number.isFinite(amount) || amount === 0) {
+      return accumulator;
+    }
+
+    const debitCreditCode = resolveDebitCreditForRow(row, operationTypeMap);
+    const absoluteAmount = Math.abs(amount);
+
+    if (debitCreditCode === "C") {
+      return accumulator - absoluteAmount;
+    }
+
+    return accumulator + absoluteAmount;
+  }, 0);
+}
+
 function createGrid(lookups, rows) {
   const memberOptions = buildLookupOptions(lookups.members);
-  const operationOptions = buildLookupOptions(lookups.operations);
   const ministryOptions = buildLookupOptions(lookups.ministries);
 
   const memberMap = buildLookupMap(lookups.members);
   const operationMap = buildLookupMap(lookups.operations);
   const ministryMap = buildLookupMap(lookups.ministries);
+  const operationTypeMap = buildOperationTypeMap(lookups.operations);
+  const operationOptionGroups = buildOperationOptionGroups(lookups.operations);
 
   state.table = new Tabulator("#grid", {
-    layout: "fitColumns",
+    layout: "fitDataTable",
     height: "65vh",
     data: rows,
+    resizableColumnFit: false,
+    columnDefaults: {
+      minWidth: 110,
+    },
     selectableRows: true,
     clipboard: true,
     clipboardPasteParser: "range",
@@ -114,6 +192,7 @@ function createGrid(lookups, rows) {
       {
         title: "lan_idmem",
         field: "lan_idmem",
+        width: 220,
         editor: "list",
         editorParams: {
           values: memberOptions,
@@ -127,23 +206,25 @@ function createGrid(lookups, rows) {
       {
         title: "lan_datlan",
         field: "lan_datlan",
+        width: 140,
         editor: "date",
       },
       {
         title: "aux_extrato_dc",
         field: "aux_extrato_dc",
-        width: 130,
+        width: 140,
         hozAlign: "center",
       },
       {
         title: "aux_extrato_desc",
         field: "aux_extrato_desc",
-        widthGrow: 2,
+        width: 440,
         headerFilter: "input",
       },
       {
         title: "lan_deslan",
         field: "lan_deslan",
+        width: 440,
         editor: "input",
         validator: ["required"],
         headerFilter: "input",
@@ -151,19 +232,28 @@ function createGrid(lookups, rows) {
       {
         title: "lan_valor",
         field: "lan_valor",
+        width: 180,
         editor: "input",
         hozAlign: "right",
         formatter: (cell) => formatMoney(cell.getValue()),
+        bottomCalc: (values, data) => calculateSignedTotalForRows(data, operationTypeMap),
+        bottomCalcFormatter: (cell) => formatMoney(cell.getValue()),
       },
       {
         title: "lan_lanope",
         field: "lan_lanope",
+        width: 280,
         editor: "list",
-        editorParams: {
-          values: operationOptions,
-          autocomplete: true,
-          listOnEmpty: true,
-          verticalNavigation: "table",
+        editorParams: (cell) => {
+          const rowData = cell.getRow().getData();
+          const debitCreditCode = normalizeDebitCreditCode(rowData.aux_extrato_dc);
+
+          return {
+            values: getOperationOptionsForRow(operationOptionGroups, debitCreditCode),
+            autocomplete: true,
+            listOnEmpty: true,
+            verticalNavigation: "table",
+          };
         },
         formatter: lookupFormatter(operationMap),
         headerFilter: "input",
@@ -171,6 +261,7 @@ function createGrid(lookups, rows) {
       {
         title: "lan_idmin",
         field: "lan_idmin",
+        width: 250,
         editor: "list",
         editorParams: {
           values: ministryOptions,
@@ -387,6 +478,7 @@ function collectRowsForSave() {
   const memberSet = new Set(state.lookups.members.map((item) => Number(item.id)));
   const operationSet = new Set(state.lookups.operations.map((item) => Number(item.id)));
   const ministrySet = new Set(state.lookups.ministries.map((item) => Number(item.id)));
+  const operationTypeMap = buildOperationTypeMap(state.lookups.operations);
 
   rows.forEach((row, index) => {
     const line = index + 1;
@@ -400,6 +492,7 @@ function collectRowsForSave() {
     const lan_deslan = String(row.lan_deslan || "").trim();
     const lan_valor = parseMoneyInput(row.lan_valor);
     const lan_datlan = String(row.lan_datlan || "").trim();
+    const auxDebitCredit = normalizeDebitCreditCode(row.aux_extrato_dc);
 
     if (!lan_idmem) {
       errors.push(`Linha ${line}: lan_idmem invalido.`);
@@ -425,6 +518,13 @@ function collectRowsForSave() {
       errors.push(`Linha ${line}: lan_lanope invalido.`);
     } else if (!operationSet.has(lan_lanope)) {
       errors.push(`Linha ${line}: lan_lanope ${lan_lanope} nao existe.`);
+    } else if (auxDebitCredit) {
+      const operationType = normalizeDebitCreditCode(operationTypeMap.get(lan_lanope));
+      if (operationType && operationType !== auxDebitCredit) {
+        errors.push(
+          `Linha ${line}: lan_lanope ${lan_lanope} nao corresponde ao tipo ${auxDebitCredit} do extrato.`
+        );
+      }
     }
 
     if (!lan_idmin) {
