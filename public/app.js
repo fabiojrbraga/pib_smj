@@ -540,6 +540,19 @@ function parseMemberIdForSave(value) {
   return parsed;
 }
 
+function parseMinistryIdForSave(value) {
+  if (isBlank(value)) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
 function parseMoneyInput(value) {
   if (typeof value === "number") {
     return value;
@@ -724,13 +737,17 @@ function validateRowForSave(row, lineLabel, validationContext) {
   const errors = [];
   const lan_idmem = parseMemberIdForSave(row.lan_idmem);
   const lan_lanope = parsePositiveInteger(row.lan_lanope);
-  const lan_idmin = parsePositiveInteger(row.lan_idmin);
+  const lan_idmin = parseMinistryIdForSave(row.lan_idmin);
   const lan_deslan = String(row.lan_deslan || "").trim();
   const lan_valor = parseMoneyInput(row.lan_valor);
   const lan_datlan = String(row.lan_datlan || "").trim();
   const auxExtractDescription = String(row.aux_extrato_desc || "").trim();
   const rawAuxDebitCredit = String(row.aux_extrato_dc || "").trim();
   const auxDebitCredit = normalizeDebitCreditCode(rawAuxDebitCredit);
+  const operationDebitCredit = lan_lanope
+    ? normalizeDebitCreditCode(validationContext.operationTypeMap.get(lan_lanope))
+    : "";
+  const debitCreditType = auxDebitCredit || operationDebitCredit;
 
   if (lan_idmem === null) {
     errors.push(`${lineLabel}: lan_idmem invalido.`);
@@ -773,9 +790,13 @@ function validateRowForSave(row, lineLabel, validationContext) {
     }
   }
 
-  if (!lan_idmin) {
-    errors.push(`${lineLabel}: lan_idmin invalido.`);
-  } else if (!validationContext.ministrySet.has(lan_idmin)) {
+  if (debitCreditType === "D") {
+    if (!lan_idmin) {
+      errors.push(`${lineLabel}: lan_idmin obrigatorio para debito.`);
+    } else if (!validationContext.ministrySet.has(lan_idmin)) {
+      errors.push(`${lineLabel}: lan_idmin ${lan_idmin} nao existe.`);
+    }
+  } else if (lan_idmin && !validationContext.ministrySet.has(lan_idmin)) {
     errors.push(`${lineLabel}: lan_idmin ${lan_idmin} nao existe.`);
   }
 
@@ -787,7 +808,7 @@ function validateRowForSave(row, lineLabel, validationContext) {
       lan_valor: Number(lan_valor.toFixed(2)),
       lan_datlan,
       lan_lanope,
-      lan_idmin,
+      lan_idmin: lan_idmin || null,
       aux_extrato_desc: auxExtractDescription,
       aux_extrato_dc: auxDebitCredit,
     },

@@ -59,13 +59,37 @@ const memberIdSchema = z.preprocess(
   z.coerce.number().int().min(0)
 );
 
+const ministryIdSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (typeof value === "string" && value.trim() === "") {
+      return null;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return value;
+    }
+
+    if (parsed <= 0) {
+      return null;
+    }
+
+    return parsed;
+  },
+  z.number().int().positive().nullable()
+);
+
 const rowSchema = z.object({
   lan_idmem: memberIdSchema,
   lan_deslan: z.string().trim().min(1).max(150),
   lan_valor: z.coerce.number().positive().max(99999999.99),
   lan_datlan: z.string().refine(isRealIsoDate, "lan_datlan deve estar no formato YYYY-MM-DD"),
   lan_lanope: z.coerce.number().int().positive(),
-  lan_idmin: z.coerce.number().int().positive(),
+  lan_idmin: ministryIdSchema,
   aux_extrato_desc: auxDescriptionSchema,
   aux_extrato_dc: auxDebitCreditSchema,
 });
@@ -102,7 +126,7 @@ function normalizeRows(rows) {
     lan_valor: Number(row.lan_valor),
     lan_datlan: row.lan_datlan,
     lan_lanope: Number(row.lan_lanope),
-    lan_idmin: Number(row.lan_idmin),
+    lan_idmin: row.lan_idmin === null ? null : Number(row.lan_idmin),
     aux_extrato_desc: row.aux_extrato_desc.trim(),
     aux_extrato_dc: row.aux_extrato_dc,
   }));
@@ -115,7 +139,7 @@ function normalizeRow(row) {
     lan_valor: Number(row.lan_valor),
     lan_datlan: row.lan_datlan,
     lan_lanope: Number(row.lan_lanope),
-    lan_idmin: Number(row.lan_idmin),
+    lan_idmin: row.lan_idmin === null ? null : Number(row.lan_idmin),
     aux_extrato_desc: row.aux_extrato_desc.trim(),
     aux_extrato_dc: row.aux_extrato_dc,
   };

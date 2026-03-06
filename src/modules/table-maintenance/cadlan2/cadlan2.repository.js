@@ -48,11 +48,17 @@ async function getCadlan2RowById(id, db = pool) {
 async function validateForeignKeys(rows, db = pool) {
   const memberIds = [...new Set(rows.map((item) => item.lan_idmem).filter((id) => Number(id) > 0))];
   const operationIds = [...new Set(rows.map((item) => item.lan_lanope))];
-  const ministryIds = [...new Set(rows.map((item) => item.lan_idmin))];
+  const ministryIds = [...new Set(rows.map((item) => item.lan_idmin).filter((id) => Number(id) > 0))];
 
-  const [memberRows] = await db.query(`SELECT id FROM cadmem WHERE id IN (?)`, [memberIds]);
-  const [operationRows] = await db.query(`SELECT id FROM cadope WHERE id IN (?)`, [operationIds]);
-  const [ministryRows] = await db.query(`SELECT id FROM cadmin WHERE id IN (?)`, [ministryIds]);
+  const [memberRows] = memberIds.length > 0
+    ? await db.query(`SELECT id FROM cadmem WHERE id IN (?)`, [memberIds])
+    : [[]];
+  const [operationRows] = operationIds.length > 0
+    ? await db.query(`SELECT id FROM cadope WHERE id IN (?)`, [operationIds])
+    : [[]];
+  const [ministryRows] = ministryIds.length > 0
+    ? await db.query(`SELECT id FROM cadmin WHERE id IN (?)`, [ministryIds])
+    : [[]];
 
   const memberSet = new Set(memberRows.map((item) => item.id));
   const operationSet = new Set(operationRows.map((item) => item.id));
@@ -67,6 +73,31 @@ async function validateForeignKeys(rows, db = pool) {
     missingOperations,
     missingMinistries,
   };
+}
+
+async function getOperationDebitCreditTypes(operationIds, db = pool) {
+  const normalizedIds = [...new Set(operationIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
+  if (normalizedIds.length === 0) {
+    return new Map();
+  }
+
+  const [rows] = await db.query(
+    `
+      SELECT
+        id,
+        type
+      FROM cadope
+      WHERE id IN (?)
+    `,
+    [normalizedIds]
+  );
+
+  return new Map(
+    rows.map((item) => [
+      Number(item.id),
+      String(item.type || "").trim().toUpperCase(),
+    ])
+  );
 }
 
 async function insertCadlan2Row(row, db = pool) {
@@ -179,6 +210,7 @@ async function validateCadlan2DatabaseRows(db = pool) {
       missingMembers: [],
       missingOperations: [],
       missingMinistries: [],
+      debitRowsWithoutMinistry: [],
     };
   }
 
@@ -213,11 +245,23 @@ async function validateCadlan2DatabaseRows(db = pool) {
     `
   );
 
+  const [debitRowsWithoutMinistryRows] = await db.query(
+    `
+      SELECT c2.id
+      FROM cadlan2 c2
+      LEFT JOIN cadope co ON co.id = c2.lan_lanope
+      WHERE COALESCE(NULLIF(UPPER(TRIM(c2.aux_extrato_dc)), ''), UPPER(TRIM(co.type)), '') = 'D'
+        AND (c2.lan_idmin IS NULL OR c2.lan_idmin <= 0)
+      ORDER BY c2.id
+    `
+  );
+
   return {
     totalRows,
     missingMembers: missingMembersRows.map((item) => item.id),
     missingOperations: missingOperationsRows.map((item) => item.id),
     missingMinistries: missingMinistriesRows.map((item) => item.id),
+    debitRowsWithoutMinistry: debitRowsWithoutMinistryRows.map((item) => item.id),
   };
 }
 
@@ -254,6 +298,7 @@ module.exports = {
   listCadlan2,
   getCadlan2RowById,
   validateForeignKeys,
+  getOperationDebitCreditTypes,
   insertCadlan2Row,
   updateCadlan2Row,
   replaceCadlan2Batch,

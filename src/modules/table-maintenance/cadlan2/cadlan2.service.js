@@ -2,12 +2,43 @@ const repository = require("./cadlan2.repository");
 const { validateCadlan2Batch, validateCadlan2Row } = require("./cadlan2.validation");
 const { ValidationError } = require("../../shared/errors");
 
+function normalizeDebitCreditCode(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "D" || normalized === "C") {
+    return normalized;
+  }
+
+  return "";
+}
+
+async function validateMinistryForDebitRows(rows) {
+  const operationIds = rows.map((row) => row.lan_lanope);
+  const operationTypeMap = await repository.getOperationDebitCreditTypes(operationIds);
+  const errors = [];
+
+  rows.forEach((row, index) => {
+    const auxType = normalizeDebitCreditCode(row.aux_extrato_dc);
+    const operationType = normalizeDebitCreditCode(operationTypeMap.get(Number(row.lan_lanope)));
+    const debitCreditType = auxType || operationType;
+    const hasMinistry = Number.isInteger(row.lan_idmin) && row.lan_idmin > 0;
+
+    if (debitCreditType === "D" && !hasMinistry) {
+      errors.push(`Linha ${index + 1}: lan_idmin obrigatorio para debito.`);
+    }
+  });
+
+  if (errors.length > 0) {
+    throw new ValidationError("Dados invalidos para cadlan2", { formErrors: errors });
+  }
+}
+
 async function getCadlan2Rows() {
   return repository.listCadlan2();
 }
 
 async function saveCadlan2Batch(payload) {
   const rows = validateCadlan2Batch(payload);
+  await validateMinistryForDebitRows(rows);
   const foreignKeysValidation = await repository.validateForeignKeys(rows);
 
   const hasForeignKeyErrors =
@@ -26,6 +57,7 @@ async function saveCadlan2Batch(payload) {
 async function saveCadlan2Row(payload) {
   const row = validateCadlan2Row(payload);
   const { id, ...rowData } = row;
+  await validateMinistryForDebitRows([rowData]);
 
   const foreignKeysValidation = await repository.validateForeignKeys([rowData]);
   const hasForeignKeyErrors =
@@ -61,7 +93,8 @@ async function commitCadlan2Batch() {
   const hasErrors =
     validation.missingMembers.length > 0 ||
     validation.missingOperations.length > 0 ||
-    validation.missingMinistries.length > 0;
+    validation.missingMinistries.length > 0 ||
+    validation.debitRowsWithoutMinistry.length > 0;
 
   if (hasErrors) {
     throw new ValidationError("Nao foi possivel confirmar. Existem chaves estrangeiras invalidas na cadlan2.", validation);
