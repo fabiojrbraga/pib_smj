@@ -404,13 +404,7 @@ function createGrid(lookups, rows) {
           if (state.busy) {
             return;
           }
-
-          const saveButton = event.target.closest(".row-save-btn");
-          if (!saveButton) {
-            return;
-          }
-
-          handleSaveRow(cell.getRow());
+          void handleSaveRow(cell.getRow());
         },
       },
       {
