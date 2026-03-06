@@ -160,8 +160,21 @@ function calculateSignedTotalForRows(rows, operationTypeMap) {
 }
 
 function isSavedCadlan2Row(row) {
-  const id = Number(row?.id);
-  return Number.isInteger(id) && id > 0;
+  return row?.__saved_in_cadlan2 === true;
+}
+
+function markRowAsSavedInCadlan2(row) {
+  return {
+    ...row,
+    __saved_in_cadlan2: true,
+  };
+}
+
+function markRowAsUnsavedInCadlan2(row) {
+  return {
+    ...normalizeUnsavedRowForStorage(row),
+    __saved_in_cadlan2: false,
+  };
 }
 
 function isCompletelyBlankRow(row) {
@@ -224,7 +237,7 @@ function loadUnsavedRowsFromLocalStorage() {
 
     return parsed
       .filter((row) => row && typeof row === "object")
-      .map((row) => normalizeUnsavedRowForStorage(row))
+      .map((row) => markRowAsUnsavedInCadlan2(row))
       .filter((row) => !isCompletelyBlankRow(row));
   } catch (error) {
     console.warn("Falha ao carregar linhas nao salvas do storage local.", error);
@@ -652,7 +665,7 @@ function parseOfxTransactions(ofxText) {
         return null;
       }
 
-      return {
+      return markRowAsUnsavedInCadlan2({
         lan_idmem: "",
         lan_deslan: "",
         lan_valor: Number(Math.abs(amount).toFixed(2)),
@@ -661,7 +674,7 @@ function parseOfxTransactions(ofxText) {
         lan_idmin: "",
         aux_extrato_desc: description,
         aux_extrato_dc: deriveDebitCredit(trnType, amount),
-      };
+      });
     })
     .filter((item) => Boolean(item));
 }
@@ -809,7 +822,8 @@ async function fetchLookupsAndRows() {
   }
 
   const localUnsavedRows = loadUnsavedRowsFromLocalStorage();
-  createGrid(lookups, [...cadlan2Data.rows, ...localUnsavedRows]);
+  const savedRowsFromDatabase = cadlan2Data.rows.map((row) => markRowAsSavedInCadlan2(row));
+  createGrid(lookups, [...savedRowsFromDatabase, ...localUnsavedRows]);
   applyGridFilters();
 
   const restoredRowsMessage =
@@ -838,7 +852,7 @@ async function handleReload() {
 
 function handleAddRow() {
   state.table.addRow(
-    {
+    markRowAsUnsavedInCadlan2({
       lan_idmem: "",
       lan_deslan: "",
       lan_valor: "",
@@ -847,9 +861,10 @@ function handleAddRow() {
       lan_idmin: "",
       aux_extrato_desc: "",
       aux_extrato_dc: "",
-    },
+    }),
     true
   );
+  persistUnsavedRowsToLocalStorage();
 }
 
 function handleDeleteRows() {
@@ -860,6 +875,7 @@ function handleDeleteRows() {
   }
 
   selectedRows.forEach((row) => row.delete());
+  persistUnsavedRowsToLocalStorage();
   setStatus(`${selectedRows.length} linha(s) removida(s) da grade.`);
 }
 
@@ -905,8 +921,9 @@ async function handleSaveRow(rowComponent) {
     }
 
     const payloadRow = validation.row;
-    if (isSavedCadlan2Row(rowData)) {
-      payloadRow.id = Number(rowData.id);
+    const persistedId = Number(rowData.id);
+    if (isSavedCadlan2Row(rowData) && Number.isInteger(persistedId) && persistedId > 0) {
+      payloadRow.id = persistedId;
     }
 
     const payload = await requestJson("/cadlan2/row", {
@@ -914,7 +931,7 @@ async function handleSaveRow(rowComponent) {
       body: JSON.stringify({ row: payloadRow }),
     });
 
-    await rowComponent.update(payload.row);
+    await rowComponent.update(markRowAsSavedInCadlan2(payload.row));
     rowComponent.reformat();
     persistUnsavedRowsToLocalStorage();
     applyGridFilters();
@@ -977,6 +994,7 @@ async function handleImportFileSelected(event) {
     }
 
     await state.table.addData(importedRows, false);
+    persistUnsavedRowsToLocalStorage();
     applyGridFilters();
     setStatus(
       `${importedRows.length} lancamento(s) importado(s). Preencha lan_deslan e demais campos obrigatorios antes de salvar.`,
