@@ -350,6 +350,7 @@ function createGrid(lookups, rows) {
   const ministryOptions = buildLookupOptions(lookups.ministries);
 
   const memberMap = buildLookupMap(lookups.members);
+  memberMap.set(0, "0 - Nao informado");
   const operationMap = buildLookupMap(lookups.operations);
   const ministryMap = buildLookupMap(lookups.ministries);
   const operationTypeMap = buildOperationTypeMap(lookups.operations);
@@ -420,8 +421,11 @@ function createGrid(lookups, rows) {
         editorParams: {
           values: memberOptions,
           autocomplete: true,
+          allowEmpty: true,
           listOnEmpty: true,
-          verticalNavigation: "table",
+          sort: "asc",
+          freetext: false,
+          verticalNavigation: "editor",
         },
         formatter: lookupFormatter(memberMap),
         headerFilter: "input",
@@ -475,8 +479,11 @@ function createGrid(lookups, rows) {
           return {
             values: getOperationOptionsForRow(operationOptionGroups, debitCreditCode),
             autocomplete: true,
+            allowEmpty: true,
             listOnEmpty: true,
-            verticalNavigation: "table",
+            sort: "asc",
+            freetext: false,
+            verticalNavigation: "editor",
           };
         },
         formatter: lookupFormatter(operationMap),
@@ -490,8 +497,11 @@ function createGrid(lookups, rows) {
         editorParams: {
           values: ministryOptions,
           autocomplete: true,
+          allowEmpty: true,
           listOnEmpty: true,
-          verticalNavigation: "table",
+          sort: "asc",
+          freetext: false,
+          verticalNavigation: "editor",
         },
         formatter: lookupFormatter(ministryMap),
         headerFilter: "input",
@@ -520,6 +530,19 @@ function parsePositiveInteger(value) {
   if (!Number.isInteger(parsed) || parsed <= 0) {
     return null;
   }
+  return parsed;
+}
+
+function parseMemberIdForSave(value) {
+  if (isBlank(value)) {
+    return 0;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return null;
+  }
+
   return parsed;
 }
 
@@ -705,7 +728,7 @@ function buildValidationContext() {
 
 function validateRowForSave(row, lineLabel, validationContext) {
   const errors = [];
-  const lan_idmem = parsePositiveInteger(row.lan_idmem);
+  const lan_idmem = parseMemberIdForSave(row.lan_idmem);
   const lan_lanope = parsePositiveInteger(row.lan_lanope);
   const lan_idmin = parsePositiveInteger(row.lan_idmin);
   const lan_deslan = String(row.lan_deslan || "").trim();
@@ -715,9 +738,9 @@ function validateRowForSave(row, lineLabel, validationContext) {
   const rawAuxDebitCredit = String(row.aux_extrato_dc || "").trim();
   const auxDebitCredit = normalizeDebitCreditCode(rawAuxDebitCredit);
 
-  if (!lan_idmem) {
+  if (lan_idmem === null) {
     errors.push(`${lineLabel}: lan_idmem invalido.`);
-  } else if (!validationContext.memberSet.has(lan_idmem)) {
+  } else if (lan_idmem > 0 && !validationContext.memberSet.has(lan_idmem)) {
     errors.push(`${lineLabel}: lan_idmem ${lan_idmem} nao existe.`);
   }
 

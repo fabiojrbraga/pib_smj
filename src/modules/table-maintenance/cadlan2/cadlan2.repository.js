@@ -46,7 +46,7 @@ async function getCadlan2RowById(id, db = pool) {
 }
 
 async function validateForeignKeys(rows, db = pool) {
-  const memberIds = [...new Set(rows.map((item) => item.lan_idmem))];
+  const memberIds = [...new Set(rows.map((item) => item.lan_idmem).filter((id) => Number(id) > 0))];
   const operationIds = [...new Set(rows.map((item) => item.lan_lanope))];
   const ministryIds = [...new Set(rows.map((item) => item.lan_idmin))];
 
@@ -188,6 +188,7 @@ async function validateCadlan2DatabaseRows(db = pool) {
       FROM cadlan2 c2
       LEFT JOIN cadmem cm ON cm.id = c2.lan_idmem
       WHERE cm.id IS NULL
+        AND c2.lan_idmem > 0
       ORDER BY c2.lan_idmem
     `
   );

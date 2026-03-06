@@ -44,8 +44,23 @@ const auxDebitCreditSchema = z.preprocess(
     )
 );
 
+const memberIdSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+
+    if (typeof value === "string" && value.trim() === "") {
+      return 0;
+    }
+
+    return value;
+  },
+  z.coerce.number().int().min(0)
+);
+
 const rowSchema = z.object({
-  lan_idmem: z.coerce.number().int().positive(),
+  lan_idmem: memberIdSchema,
   lan_deslan: z.string().trim().min(1).max(150),
   lan_valor: z.coerce.number().positive().max(99999999.99),
   lan_datlan: z.string().refine(isRealIsoDate, "lan_datlan deve estar no formato YYYY-MM-DD"),
