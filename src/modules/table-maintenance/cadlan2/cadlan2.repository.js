@@ -11,7 +11,9 @@ async function listCadlan2(db = pool) {
         lan_valor,
         DATE_FORMAT(lan_datlan, '%Y-%m-%d') AS lan_datlan,
         lan_lanope,
-        lan_idmin
+        lan_idmin,
+        aux_extrato_desc,
+        aux_extrato_dc
       FROM cadlan2
       ORDER BY id
     `
@@ -30,7 +32,9 @@ async function getCadlan2RowById(id, db = pool) {
         lan_valor,
         DATE_FORMAT(lan_datlan, '%Y-%m-%d') AS lan_datlan,
         lan_lanope,
-        lan_idmin
+        lan_idmin,
+        aux_extrato_desc,
+        aux_extrato_dc
       FROM cadlan2
       WHERE id = ?
       LIMIT 1
@@ -74,10 +78,21 @@ async function insertCadlan2Row(row, db = pool) {
         lan_valor,
         lan_datlan,
         lan_lanope,
-        lan_idmin
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        lan_idmin,
+        aux_extrato_desc,
+        aux_extrato_dc
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    [row.lan_idmem, row.lan_deslan, row.lan_valor, row.lan_datlan, row.lan_lanope, row.lan_idmin]
+    [
+      row.lan_idmem,
+      row.lan_deslan,
+      row.lan_valor,
+      row.lan_datlan,
+      row.lan_lanope,
+      row.lan_idmin,
+      row.aux_extrato_desc,
+      row.aux_extrato_dc,
+    ]
   );
 
   return getCadlan2RowById(result.insertId, db);
@@ -93,10 +108,22 @@ async function updateCadlan2Row(id, row, db = pool) {
         lan_valor = ?,
         lan_datlan = ?,
         lan_lanope = ?,
-        lan_idmin = ?
+        lan_idmin = ?,
+        aux_extrato_desc = ?,
+        aux_extrato_dc = ?
       WHERE id = ?
     `,
-    [row.lan_idmem, row.lan_deslan, row.lan_valor, row.lan_datlan, row.lan_lanope, row.lan_idmin, id]
+    [
+      row.lan_idmem,
+      row.lan_deslan,
+      row.lan_valor,
+      row.lan_datlan,
+      row.lan_lanope,
+      row.lan_idmin,
+      row.aux_extrato_desc,
+      row.aux_extrato_dc,
+      id,
+    ]
   );
 
   if (result.affectedRows === 0) {
@@ -117,6 +144,8 @@ async function replaceCadlan2Batch(rows) {
       item.lan_datlan,
       item.lan_lanope,
       item.lan_idmin,
+      item.aux_extrato_desc,
+      item.aux_extrato_dc,
     ]);
 
     await connection.query(
@@ -127,7 +156,9 @@ async function replaceCadlan2Batch(rows) {
           lan_valor,
           lan_datlan,
           lan_lanope,
-          lan_idmin
+          lan_idmin,
+          aux_extrato_desc,
+          aux_extrato_dc
         ) VALUES ?
       `,
       [values]

@@ -16,6 +16,34 @@ function isRealIsoDate(dateText) {
   return parsed.toISOString().slice(0, 10) === dateText;
 }
 
+const auxDescriptionSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    return String(value);
+  },
+  z.string().trim().max(300)
+);
+
+const auxDebitCreditSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    return String(value).trim().toUpperCase();
+  },
+  z
+    .string()
+    .max(1)
+    .refine(
+      (value) => value === "" || value === "D" || value === "C",
+      "aux_extrato_dc deve ser D, C ou vazio"
+    )
+);
+
 const rowSchema = z.object({
   lan_idmem: z.coerce.number().int().positive(),
   lan_deslan: z.string().trim().min(1).max(150),
@@ -23,6 +51,8 @@ const rowSchema = z.object({
   lan_datlan: z.string().refine(isRealIsoDate, "lan_datlan deve estar no formato YYYY-MM-DD"),
   lan_lanope: z.coerce.number().int().positive(),
   lan_idmin: z.coerce.number().int().positive(),
+  aux_extrato_desc: auxDescriptionSchema,
+  aux_extrato_dc: auxDebitCreditSchema,
 });
 
 const optionalIdSchema = z.preprocess(
@@ -58,6 +88,8 @@ function normalizeRows(rows) {
     lan_datlan: row.lan_datlan,
     lan_lanope: Number(row.lan_lanope),
     lan_idmin: Number(row.lan_idmin),
+    aux_extrato_desc: row.aux_extrato_desc.trim(),
+    aux_extrato_dc: row.aux_extrato_dc,
   }));
 }
 
@@ -69,6 +101,8 @@ function normalizeRow(row) {
     lan_datlan: row.lan_datlan,
     lan_lanope: Number(row.lan_lanope),
     lan_idmin: Number(row.lan_idmin),
+    aux_extrato_desc: row.aux_extrato_desc.trim(),
+    aux_extrato_dc: row.aux_extrato_dc,
   };
 
   if (Number.isInteger(row.id) && row.id > 0) {

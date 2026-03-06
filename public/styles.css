@@ -235,6 +235,17 @@ h1 {
   background: rgba(11, 143, 106, 0.16);
 }
 
+.tabulator-tooltip {
+  max-width: min(620px, 82vw);
+  white-space: normal;
+  line-height: 1.4;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(14, 33, 29, 0.35);
+  background: rgba(17, 34, 31, 0.95);
+  color: #f5fbf9;
+}
+
 .row-save-btn {
   width: 32px;
   height: 32px;

@@ -339,6 +339,11 @@ function createGrid(lookups, rows) {
         title: "aux_extrato_desc",
         field: "aux_extrato_desc",
         width: 440,
+        tooltip: (cellOrEvent, maybeCell) => {
+          const cell = maybeCell || cellOrEvent;
+          const description = String(cell?.getValue?.() || "").trim();
+          return description || false;
+        },
         headerFilter: "input",
       },
       {
@@ -607,7 +612,9 @@ function validateRowForSave(row, lineLabel, validationContext) {
   const lan_deslan = String(row.lan_deslan || "").trim();
   const lan_valor = parseMoneyInput(row.lan_valor);
   const lan_datlan = String(row.lan_datlan || "").trim();
-  const auxDebitCredit = normalizeDebitCreditCode(row.aux_extrato_dc);
+  const auxExtractDescription = String(row.aux_extrato_desc || "").trim();
+  const rawAuxDebitCredit = String(row.aux_extrato_dc || "").trim();
+  const auxDebitCredit = normalizeDebitCreditCode(rawAuxDebitCredit);
 
   if (!lan_idmem) {
     errors.push(`${lineLabel}: lan_idmem invalido.`);
@@ -627,6 +634,14 @@ function validateRowForSave(row, lineLabel, validationContext) {
 
   if (!isIsoDate(lan_datlan)) {
     errors.push(`${lineLabel}: lan_datlan invalida. Use YYYY-MM-DD.`);
+  }
+
+  if (auxExtractDescription.length > 300) {
+    errors.push(`${lineLabel}: aux_extrato_desc excede 300 caracteres.`);
+  }
+
+  if (rawAuxDebitCredit && !auxDebitCredit) {
+    errors.push(`${lineLabel}: aux_extrato_dc invalido. Use D, C ou vazio.`);
   }
 
   if (!lan_lanope) {
@@ -657,6 +672,8 @@ function validateRowForSave(row, lineLabel, validationContext) {
       lan_datlan,
       lan_lanope,
       lan_idmin,
+      aux_extrato_desc: auxExtractDescription,
+      aux_extrato_dc: auxDebitCredit,
     },
   };
 }

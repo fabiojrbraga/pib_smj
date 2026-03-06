@@ -10,6 +10,8 @@ const tableRegistry = Object.freeze({
       "lan_datlan",
       "lan_lanope",
       "lan_idmin",
+      "aux_extrato_desc",
+      "aux_extrato_dc",
     ],
   },
 });
