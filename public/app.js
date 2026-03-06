@@ -1,5 +1,7 @@
 const API_BASE = "/api";
 const UNSAVED_ROWS_STORAGE_KEY = "cadlan2_unsaved_rows_v1";
+const COMBOBOX_FIELDS = new Set(["lan_idmem", "lan_lanope", "lan_idmin"]);
+const COMBOBOX_NAV_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter"]);
 
 const state = {
   lookups: null,
@@ -60,6 +62,38 @@ function buildLookupOptions(items) {
     label: `${item.id} - ${item.label}`,
     value: Number(item.id),
   }));
+}
+
+function buildListEditorParams(values) {
+  return {
+    values,
+    autocomplete: true,
+    allowEmpty: true,
+    listOnEmpty: true,
+    sort: "asc",
+    freetext: false,
+    verticalNavigation: "editor",
+  };
+}
+
+function bindComboboxNavigation(cell) {
+  if (!COMBOBOX_FIELDS.has(cell.getField())) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    const editorInput = cell.getElement()?.querySelector("input");
+    if (!editorInput || editorInput.dataset.comboNavBound === "1") {
+      return;
+    }
+
+    editorInput.dataset.comboNavBound = "1";
+    editorInput.addEventListener("keydown", (event) => {
+      if (COMBOBOX_NAV_KEYS.has(event.key)) {
+        event.stopPropagation();
+      }
+    });
+  });
 }
 
 function lookupFormatter(lookupMap) {
@@ -402,6 +436,7 @@ function createGrid(lookups, rows) {
     clipboardPasteParser: "range",
     clipboardPasteAction: "replace",
     dataChanged: (data) => persistUnsavedRowsToLocalStorage(data),
+    cellEditing: bindComboboxNavigation,
     rowFormatter: applySavedRowClass,
     rowUpdated: applySavedRowClass,
     rowHeader: {
@@ -438,15 +473,7 @@ function createGrid(lookups, rows) {
         field: "lan_idmem",
         width: 220,
         editor: "list",
-        editorParams: {
-          values: memberOptions,
-          autocomplete: true,
-          allowEmpty: true,
-          listOnEmpty: true,
-          sort: "asc",
-          freetext: false,
-          verticalNavigation: "editor",
-        },
+        editorParams: () => buildListEditorParams(memberOptions),
         formatter: lookupFormatter(memberMap),
         headerFilter: "input",
         cellEdited: (cell) => {
@@ -523,15 +550,9 @@ function createGrid(lookups, rows) {
           const rowData = cell.getRow().getData();
           const debitCreditCode = normalizeDebitCreditCode(rowData.aux_extrato_dc);
 
-          return {
-            values: getOperationOptionsForRow(operationOptionGroups, debitCreditCode),
-            autocomplete: true,
-            allowEmpty: true,
-            listOnEmpty: true,
-            sort: "asc",
-            freetext: false,
-            verticalNavigation: "editor",
-          };
+          return buildListEditorParams(
+            getOperationOptionsForRow(operationOptionGroups, debitCreditCode)
+          );
         },
         formatter: lookupFormatter(operationMap),
         headerFilter: "input",
@@ -541,15 +562,7 @@ function createGrid(lookups, rows) {
         field: "lan_idmin",
         width: 250,
         editor: "list",
-        editorParams: {
-          values: ministryOptions,
-          autocomplete: true,
-          allowEmpty: true,
-          listOnEmpty: true,
-          sort: "asc",
-          freetext: false,
-          verticalNavigation: "editor",
-        },
+        editorParams: () => buildListEditorParams(ministryOptions),
         formatter: lookupFormatter(ministryMap),
         headerFilter: "input",
       },
