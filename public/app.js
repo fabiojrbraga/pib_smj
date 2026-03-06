@@ -51,6 +51,10 @@ function buildLookupMap(items) {
   return new Map(items.map((item) => [Number(item.id), `${item.id} - ${item.label}`]));
 }
 
+function buildMemberNameMap(items) {
+  return new Map(items.map((item) => [Number(item.id), String(item.label || "").trim()]));
+}
+
 function buildLookupOptions(items) {
   return items.map((item) => ({
     label: `${item.id} - ${item.label}`,
@@ -369,6 +373,7 @@ function createGrid(lookups, rows) {
   const ministryOptions = buildLookupOptions(lookups.ministries);
 
   const memberMap = buildLookupMap(lookups.members);
+  const memberNameMap = buildMemberNameMap(lookups.members);
   memberMap.set(0, "0 - Nao informado");
   const operationMap = buildLookupMap(lookups.operations);
   const ministryMap = buildLookupMap(lookups.ministries);
@@ -443,6 +448,33 @@ function createGrid(lookups, rows) {
         },
         formatter: lookupFormatter(memberMap),
         headerFilter: "input",
+        cellEdited: (cell) => {
+          const selectedMemberId = parsePositiveInteger(cell.getValue());
+          if (!selectedMemberId) {
+            return;
+          }
+
+          const selectedMemberName = memberNameMap.get(selectedMemberId);
+          if (!selectedMemberName) {
+            return;
+          }
+
+          const rowComponent = cell.getRow();
+          const rowData = rowComponent.getData();
+          const updates = {};
+
+          if (String(rowData.lan_deslan || "").trim() !== selectedMemberName) {
+            updates.lan_deslan = selectedMemberName;
+          }
+
+          if (Number(rowData.lan_lanope) !== 1) {
+            updates.lan_lanope = 1;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            void rowComponent.update(updates);
+          }
+        },
       },
       {
         title: "lan_datlan",
