@@ -353,6 +353,7 @@ function createGrid(lookups, rows) {
   memberMap.set(0, "0 - Nao informado");
   const operationMap = buildLookupMap(lookups.operations);
   const ministryMap = buildLookupMap(lookups.ministries);
+  ministryMap.set(0, "0 - Nao informado");
   const operationTypeMap = buildOperationTypeMap(lookups.operations);
   const operationOptionGroups = buildOperationOptionGroups(lookups.operations);
 
@@ -542,11 +543,11 @@ function parseMemberIdForSave(value) {
 
 function parseMinistryIdForSave(value) {
   if (isBlank(value)) {
-    return null;
+    return 0;
   }
 
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
+  if (!Number.isInteger(parsed) || parsed < 0) {
     return null;
   }
 
@@ -808,7 +809,7 @@ function validateRowForSave(row, lineLabel, validationContext) {
       lan_valor: Number(lan_valor.toFixed(2)),
       lan_datlan,
       lan_lanope,
-      lan_idmin: lan_idmin || null,
+      lan_idmin: lan_idmin === null ? 0 : lan_idmin,
       aux_extrato_desc: auxExtractDescription,
       aux_extrato_dc: auxDebitCredit,
     },

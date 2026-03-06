@@ -120,7 +120,7 @@ async function insertCadlan2Row(row, db = pool) {
       row.lan_valor,
       row.lan_datlan,
       row.lan_lanope,
-      row.lan_idmin,
+      row.lan_idmin ?? 0,
       row.aux_extrato_desc,
       row.aux_extrato_dc,
     ]
@@ -150,7 +150,7 @@ async function updateCadlan2Row(id, row, db = pool) {
       row.lan_valor,
       row.lan_datlan,
       row.lan_lanope,
-      row.lan_idmin,
+      row.lan_idmin ?? 0,
       row.aux_extrato_desc,
       row.aux_extrato_dc,
       id,
@@ -174,7 +174,7 @@ async function replaceCadlan2Batch(rows) {
       item.lan_valor,
       item.lan_datlan,
       item.lan_lanope,
-      item.lan_idmin,
+      item.lan_idmin ?? 0,
       item.aux_extrato_desc,
       item.aux_extrato_dc,
     ]);
@@ -241,6 +241,7 @@ async function validateCadlan2DatabaseRows(db = pool) {
       FROM cadlan2 c2
       LEFT JOIN cadmin ci ON ci.id = c2.lan_idmin
       WHERE ci.id IS NULL
+        AND c2.lan_idmin > 0
       ORDER BY c2.lan_idmin
     `
   );

@@ -62,11 +62,11 @@ const memberIdSchema = z.preprocess(
 const ministryIdSchema = z.preprocess(
   (value) => {
     if (value === null || value === undefined) {
-      return null;
+      return 0;
     }
 
     if (typeof value === "string" && value.trim() === "") {
-      return null;
+      return 0;
     }
 
     const parsed = Number(value);
@@ -75,12 +75,12 @@ const ministryIdSchema = z.preprocess(
     }
 
     if (parsed <= 0) {
-      return null;
+      return 0;
     }
 
     return parsed;
   },
-  z.number().int().positive().nullable()
+  z.coerce.number().int().min(0)
 );
 
 const rowSchema = z.object({
@@ -126,7 +126,7 @@ function normalizeRows(rows) {
     lan_valor: Number(row.lan_valor),
     lan_datlan: row.lan_datlan,
     lan_lanope: Number(row.lan_lanope),
-    lan_idmin: row.lan_idmin === null ? null : Number(row.lan_idmin),
+    lan_idmin: Number(row.lan_idmin),
     aux_extrato_desc: row.aux_extrato_desc.trim(),
     aux_extrato_dc: row.aux_extrato_dc,
   }));
@@ -139,7 +139,7 @@ function normalizeRow(row) {
     lan_valor: Number(row.lan_valor),
     lan_datlan: row.lan_datlan,
     lan_lanope: Number(row.lan_lanope),
-    lan_idmin: row.lan_idmin === null ? null : Number(row.lan_idmin),
+    lan_idmin: Number(row.lan_idmin),
     aux_extrato_desc: row.aux_extrato_desc.trim(),
     aux_extrato_dc: row.aux_extrato_dc,
   };
