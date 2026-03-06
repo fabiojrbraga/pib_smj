@@ -1,4 +1,5 @@
 const API_BASE = "/api";
+const UNSAVED_ROWS_STORAGE_KEY = "cadlan2_unsaved_rows_v1";
 
 const state = {
   lookups: null,
@@ -163,6 +164,82 @@ function isSavedCadlan2Row(row) {
   return Number.isInteger(id) && id > 0;
 }
 
+function isCompletelyBlankRow(row) {
+  return (
+    isBlank(row.lan_idmem) &&
+    isBlank(row.lan_deslan) &&
+    isBlank(row.lan_valor) &&
+    isBlank(row.lan_datlan) &&
+    isBlank(row.lan_lanope) &&
+    isBlank(row.lan_idmin) &&
+    isBlank(row.aux_extrato_desc) &&
+    isBlank(row.aux_extrato_dc)
+  );
+}
+
+function normalizeUnsavedRowForStorage(row) {
+  return {
+    lan_idmem: row.lan_idmem ?? "",
+    lan_deslan: row.lan_deslan ?? "",
+    lan_valor: row.lan_valor ?? "",
+    lan_datlan: row.lan_datlan ?? "",
+    lan_lanope: row.lan_lanope ?? "",
+    lan_idmin: row.lan_idmin ?? "",
+    aux_extrato_desc: row.aux_extrato_desc ?? "",
+    aux_extrato_dc: row.aux_extrato_dc ?? "",
+  };
+}
+
+function persistUnsavedRowsToLocalStorage(rowsData = null) {
+  try {
+    const sourceRows = Array.isArray(rowsData) ? rowsData : state.table?.getData() || [];
+    const unsavedRows = sourceRows
+      .filter((row) => !isSavedCadlan2Row(row))
+      .map((row) => normalizeUnsavedRowForStorage(row))
+      .filter((row) => !isCompletelyBlankRow(row));
+
+    if (unsavedRows.length === 0) {
+      window.localStorage.removeItem(UNSAVED_ROWS_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(UNSAVED_ROWS_STORAGE_KEY, JSON.stringify(unsavedRows));
+  } catch (error) {
+    // Storage failures should not interrupt the main grid flow.
+    console.warn("Falha ao persistir linhas nao salvas no storage local.", error);
+  }
+}
+
+function loadUnsavedRowsFromLocalStorage() {
+  try {
+    const rawValue = window.localStorage.getItem(UNSAVED_ROWS_STORAGE_KEY);
+    if (!rawValue) {
+      return [];
+    }
+
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((row) => row && typeof row === "object")
+      .map((row) => normalizeUnsavedRowForStorage(row))
+      .filter((row) => !isCompletelyBlankRow(row));
+  } catch (error) {
+    console.warn("Falha ao carregar linhas nao salvas do storage local.", error);
+    return [];
+  }
+}
+
+function clearUnsavedRowsFromLocalStorage() {
+  try {
+    window.localStorage.removeItem(UNSAVED_ROWS_STORAGE_KEY);
+  } catch (error) {
+    console.warn("Falha ao limpar linhas nao salvas do storage local.", error);
+  }
+}
+
 function normalizeIsoDateForFilter(value) {
   const normalized = String(value || "").trim();
   return isIsoDate(normalized) ? normalized : "";
@@ -273,6 +350,7 @@ function createGrid(lookups, rows) {
     clipboard: true,
     clipboardPasteParser: "range",
     clipboardPasteAction: "replace",
+    dataChanged: (data) => persistUnsavedRowsToLocalStorage(data),
     rowFormatter: applySavedRowClass,
     rowUpdated: applySavedRowClass,
     rowHeader: {
@@ -722,10 +800,19 @@ async function fetchLookupsAndRows() {
     state.table = null;
   }
 
-  createGrid(lookups, cadlan2Data.rows);
+  const localUnsavedRows = loadUnsavedRowsFromLocalStorage();
+  createGrid(lookups, [...cadlan2Data.rows, ...localUnsavedRows]);
   applyGridFilters();
 
-  setStatus(`Dados carregados. ${cadlan2Data.rows.length} linha(s) na cadlan2.`, "success");
+  const restoredRowsMessage =
+    localUnsavedRows.length > 0
+      ? ` ${localUnsavedRows.length} linha(s) local(is) nao salva(s) restaurada(s).`
+      : "";
+
+  setStatus(
+    `Dados carregados. ${cadlan2Data.rows.length} linha(s) na cadlan2.${restoredRowsMessage}`,
+    "success"
+  );
 }
 
 async function handleReload() {
@@ -779,6 +866,7 @@ async function handleSave() {
       body: JSON.stringify({ rows }),
     });
 
+    clearUnsavedRowsFromLocalStorage();
     await fetchLookupsAndRows();
     setStatus(`${payload.message} Total de linhas: ${payload.total}.`, "success");
   } catch (error) {
@@ -820,6 +908,7 @@ async function handleSaveRow(rowComponent) {
 
     await rowComponent.update(payload.row);
     rowComponent.reformat();
+    persistUnsavedRowsToLocalStorage();
     applyGridFilters();
     setStatus(`${rowLabel} salva com sucesso. ID ${payload.row.id}.`, "success");
   } catch (error) {
