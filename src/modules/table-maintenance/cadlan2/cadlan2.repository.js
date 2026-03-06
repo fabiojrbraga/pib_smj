@@ -85,7 +85,7 @@ async function getOperationDebitCreditTypes(operationIds, db = pool) {
     `
       SELECT
         id,
-        type
+        cad_credeb
       FROM cadope
       WHERE id IN (?)
     `,
@@ -95,7 +95,7 @@ async function getOperationDebitCreditTypes(operationIds, db = pool) {
   return new Map(
     rows.map((item) => [
       Number(item.id),
-      String(item.type || "").trim().toUpperCase(),
+      String(item.cad_credeb || "").trim().toUpperCase(),
     ])
   );
 }
@@ -250,7 +250,7 @@ async function validateCadlan2DatabaseRows(db = pool) {
       SELECT c2.id
       FROM cadlan2 c2
       LEFT JOIN cadope co ON co.id = c2.lan_lanope
-      WHERE COALESCE(NULLIF(UPPER(TRIM(c2.aux_extrato_dc)), ''), UPPER(TRIM(co.type)), '') = 'D'
+      WHERE COALESCE(NULLIF(UPPER(TRIM(c2.aux_extrato_dc)), ''), UPPER(TRIM(co.cad_credeb)), '') = 'D'
         AND (c2.lan_idmin IS NULL OR c2.lan_idmin <= 0)
       ORDER BY c2.id
     `
