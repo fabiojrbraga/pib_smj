@@ -20,6 +20,27 @@ async function listCadlan2(db = pool) {
   return rows;
 }
 
+async function getCadlan2RowById(id, db = pool) {
+  const [rows] = await db.query(
+    `
+      SELECT
+        id,
+        lan_idmem,
+        lan_deslan,
+        lan_valor,
+        DATE_FORMAT(lan_datlan, '%Y-%m-%d') AS lan_datlan,
+        lan_lanope,
+        lan_idmin
+      FROM cadlan2
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [id]
+  );
+
+  return rows[0] || null;
+}
+
 async function validateForeignKeys(rows, db = pool) {
   const memberIds = [...new Set(rows.map((item) => item.lan_idmem))];
   const operationIds = [...new Set(rows.map((item) => item.lan_lanope))];
@@ -42,6 +63,47 @@ async function validateForeignKeys(rows, db = pool) {
     missingOperations,
     missingMinistries,
   };
+}
+
+async function insertCadlan2Row(row, db = pool) {
+  const [result] = await db.query(
+    `
+      INSERT INTO cadlan2 (
+        lan_idmem,
+        lan_deslan,
+        lan_valor,
+        lan_datlan,
+        lan_lanope,
+        lan_idmin
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    [row.lan_idmem, row.lan_deslan, row.lan_valor, row.lan_datlan, row.lan_lanope, row.lan_idmin]
+  );
+
+  return getCadlan2RowById(result.insertId, db);
+}
+
+async function updateCadlan2Row(id, row, db = pool) {
+  const [result] = await db.query(
+    `
+      UPDATE cadlan2
+      SET
+        lan_idmem = ?,
+        lan_deslan = ?,
+        lan_valor = ?,
+        lan_datlan = ?,
+        lan_lanope = ?,
+        lan_idmin = ?
+      WHERE id = ?
+    `,
+    [row.lan_idmem, row.lan_deslan, row.lan_valor, row.lan_datlan, row.lan_lanope, row.lan_idmin, id]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return getCadlan2RowById(id, db);
 }
 
 async function replaceCadlan2Batch(rows) {
@@ -158,7 +220,10 @@ async function commitCadlan2ToCadlan() {
 
 module.exports = {
   listCadlan2,
+  getCadlan2RowById,
   validateForeignKeys,
+  insertCadlan2Row,
+  updateCadlan2Row,
   replaceCadlan2Batch,
   validateCadlan2DatabaseRows,
   commitCadlan2ToCadlan,

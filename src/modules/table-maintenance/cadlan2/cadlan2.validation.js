@@ -25,8 +25,29 @@ const rowSchema = z.object({
   lan_idmin: z.coerce.number().int().positive(),
 });
 
+const optionalIdSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === "string" && value.trim() === "") {
+      return undefined;
+    }
+
+    return value;
+  },
+  z.coerce.number().int().positive().optional()
+);
+
 const batchSchema = z.object({
   rows: z.array(rowSchema).min(1, "Informe ao menos um registro"),
+});
+
+const singleRowSchema = z.object({
+  row: rowSchema.extend({
+    id: optionalIdSchema,
+  }),
 });
 
 function normalizeRows(rows) {
@@ -40,6 +61,23 @@ function normalizeRows(rows) {
   }));
 }
 
+function normalizeRow(row) {
+  const normalizedRow = {
+    lan_idmem: Number(row.lan_idmem),
+    lan_deslan: row.lan_deslan.trim(),
+    lan_valor: Number(row.lan_valor),
+    lan_datlan: row.lan_datlan,
+    lan_lanope: Number(row.lan_lanope),
+    lan_idmin: Number(row.lan_idmin),
+  };
+
+  if (Number.isInteger(row.id) && row.id > 0) {
+    normalizedRow.id = Number(row.id);
+  }
+
+  return normalizedRow;
+}
+
 function validateCadlan2Batch(payload) {
   const parsed = batchSchema.safeParse(payload);
 
@@ -50,6 +88,17 @@ function validateCadlan2Batch(payload) {
   return normalizeRows(parsed.data.rows);
 }
 
+function validateCadlan2Row(payload) {
+  const parsed = singleRowSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    throw new ValidationError("Dados invalidos para cadlan2", parsed.error.flatten());
+  }
+
+  return normalizeRow(parsed.data.row);
+}
+
 module.exports = {
   validateCadlan2Batch,
+  validateCadlan2Row,
 };

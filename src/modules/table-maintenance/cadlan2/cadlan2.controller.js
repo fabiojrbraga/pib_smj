@@ -21,6 +21,20 @@ async function saveBatch(req, res, next) {
   }
 }
 
+async function saveRow(req, res, next) {
+  try {
+    const result = await service.saveCadlan2Row(req.body);
+    res.json({
+      message: result.created
+        ? "Linha salva com sucesso na cadlan2."
+        : "Linha atualizada com sucesso na cadlan2.",
+      row: result.row,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function commitBatch(req, res, next) {
   try {
     const result = await service.commitCadlan2Batch();
@@ -36,5 +50,6 @@ async function commitBatch(req, res, next) {
 module.exports = {
   listRows,
   saveBatch,
+  saveRow,
   commitBatch,
 };

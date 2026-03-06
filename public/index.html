@@ -38,6 +38,21 @@
             Confirmar e enviar para cadlan
           </button>
         </div>
+        <div class="filterbar">
+          <label class="toggle-control" for="showSavedCheckbox">
+            <input id="showSavedCheckbox" type="checkbox" checked />
+            Mostrar registros ja salvos na cadlan2
+          </label>
+          <label class="date-filter" for="dateFromFilter">
+            De
+            <input id="dateFromFilter" class="input-date" type="date" />
+          </label>
+          <label class="date-filter" for="dateToFilter">
+            Ate
+            <input id="dateToFilter" class="input-date" type="date" />
+          </label>
+          <button id="clearDateFilterButton" class="btn btn-ghost" type="button">Limpar datas</button>
+        </div>
 
         <input id="ofxFileInput" class="hidden-file-input" type="file" accept=".ofx,.qfx,text/plain" />
         <div id="statusBar" class="status">Carregando dados...</div>

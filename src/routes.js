@@ -14,6 +14,7 @@ router.get("/lookups", lookupsController.getLookups);
 
 router.get("/cadlan2", cadlan2Controller.listRows);
 router.put("/cadlan2/batch", cadlan2Controller.saveBatch);
+router.put("/cadlan2/row", cadlan2Controller.saveRow);
 router.post("/cadlan2/commit", cadlan2Controller.commitBatch);
 
 module.exports = { router };

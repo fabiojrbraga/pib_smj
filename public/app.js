@@ -23,7 +23,9 @@ function setStatus(message, type = "info") {
 function setBusy(busy) {
   state.busy = busy;
   Object.values(state.controls).forEach((element) => {
-    element.disabled = busy;
+    if (element) {
+      element.disabled = busy;
+    }
   });
 }
 
@@ -156,6 +158,82 @@ function calculateSignedTotalForRows(rows, operationTypeMap) {
   }, 0);
 }
 
+function isSavedCadlan2Row(row) {
+  const id = Number(row?.id);
+  return Number.isInteger(id) && id > 0;
+}
+
+function normalizeIsoDateForFilter(value) {
+  const normalized = String(value || "").trim();
+  return isIsoDate(normalized) ? normalized : "";
+}
+
+function getActiveDateRange() {
+  const fromInput = normalizeIsoDateForFilter(state.controls.dateFrom?.value);
+  const toInput = normalizeIsoDateForFilter(state.controls.dateTo?.value);
+
+  if (fromInput && toInput && fromInput > toInput) {
+    return {
+      from: toInput,
+      to: fromInput,
+    };
+  }
+
+  return {
+    from: fromInput,
+    to: toInput,
+  };
+}
+
+function applyGridFilters() {
+  if (!state.table || !state.controls.showSaved) {
+    return;
+  }
+
+  const shouldShowSavedRows = state.controls.showSaved.checked;
+  const dateRange = getActiveDateRange();
+
+  state.table.setFilter((rowData) => {
+    if (!shouldShowSavedRows && isSavedCadlan2Row(rowData)) {
+      return false;
+    }
+
+    if (!dateRange.from && !dateRange.to) {
+      return true;
+    }
+
+    const rowDate = normalizeIsoDateForFilter(rowData.lan_datlan);
+    if (!rowDate) {
+      return false;
+    }
+
+    if (dateRange.from && rowDate < dateRange.from) {
+      return false;
+    }
+
+    if (dateRange.to && rowDate > dateRange.to) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function saveButtonFormatter(cell) {
+  const rowData = cell.getRow().getData();
+  const isSaved = isSavedCadlan2Row(rowData);
+  const actionLabel = isSaved ? "Atualizar linha na cadlan2" : "Salvar linha na cadlan2";
+  const buttonClass = isSaved ? "row-save-btn row-save-btn-saved" : "row-save-btn";
+
+  return `
+    <button class="${buttonClass}" type="button" title="${actionLabel}" aria-label="${actionLabel}">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 2h13l3 3v17H4V2zm2 2v4h10V4H6zm0 8v8h12v-8H6z"></path>
+      </svg>
+    </button>
+  `;
+}
+
 function createGrid(lookups, rows) {
   const memberOptions = buildLookupOptions(lookups.members);
   const ministryOptions = buildLookupOptions(lookups.ministries);
@@ -167,12 +245,20 @@ function createGrid(lookups, rows) {
   const operationOptionGroups = buildOperationOptionGroups(lookups.operations);
 
   state.table = new Tabulator("#grid", {
-    layout: "fitDataTable",
+    layout: "fitColumns",
     height: "65vh",
     data: rows,
-    resizableColumnFit: false,
+    resizableColumns: true,
+    resizableColumnFit: true,
+    layoutColumnsOnNewData: false,
+    persistenceMode: "local",
+    persistenceID: "cadlan2-grid-layout",
+    persistence: {
+      columns: true,
+    },
     columnDefaults: {
       minWidth: 110,
+      resizable: true,
     },
     selectableRows: true,
     clipboard: true,
@@ -184,11 +270,34 @@ function createGrid(lookups, rows) {
       headerSort: false,
       hozAlign: "center",
       width: 54,
+      resizable: false,
       cellClick: (event, cell) => {
         cell.getRow().toggleSelect();
       },
     },
     columns: [
+      {
+        title: "",
+        field: "__save",
+        width: 78,
+        minWidth: 78,
+        hozAlign: "center",
+        headerSort: false,
+        resizable: false,
+        formatter: saveButtonFormatter,
+        cellClick: (event, cell) => {
+          if (state.busy) {
+            return;
+          }
+
+          const saveButton = event.target.closest(".row-save-btn");
+          if (!saveButton) {
+            return;
+          }
+
+          handleSaveRow(cell.getRow());
+        },
+      },
       {
         title: "lan_idmem",
         field: "lan_idmem",
@@ -470,77 +579,95 @@ async function readTextFileWithFallback(file) {
   }
 }
 
-function collectRowsForSave() {
-  const rows = state.table.getData();
-  const validRows = [];
+function buildValidationContext() {
+  return {
+    memberSet: new Set(state.lookups.members.map((item) => Number(item.id))),
+    operationSet: new Set(state.lookups.operations.map((item) => Number(item.id))),
+    ministrySet: new Set(state.lookups.ministries.map((item) => Number(item.id))),
+    operationTypeMap: buildOperationTypeMap(state.lookups.operations),
+  };
+}
+
+function validateRowForSave(row, lineLabel, validationContext) {
   const errors = [];
+  const lan_idmem = parsePositiveInteger(row.lan_idmem);
+  const lan_lanope = parsePositiveInteger(row.lan_lanope);
+  const lan_idmin = parsePositiveInteger(row.lan_idmin);
+  const lan_deslan = String(row.lan_deslan || "").trim();
+  const lan_valor = parseMoneyInput(row.lan_valor);
+  const lan_datlan = String(row.lan_datlan || "").trim();
+  const auxDebitCredit = normalizeDebitCreditCode(row.aux_extrato_dc);
 
-  const memberSet = new Set(state.lookups.members.map((item) => Number(item.id)));
-  const operationSet = new Set(state.lookups.operations.map((item) => Number(item.id)));
-  const ministrySet = new Set(state.lookups.ministries.map((item) => Number(item.id)));
-  const operationTypeMap = buildOperationTypeMap(state.lookups.operations);
+  if (!lan_idmem) {
+    errors.push(`${lineLabel}: lan_idmem invalido.`);
+  } else if (!validationContext.memberSet.has(lan_idmem)) {
+    errors.push(`${lineLabel}: lan_idmem ${lan_idmem} nao existe.`);
+  }
 
-  rows.forEach((row, index) => {
-    const line = index + 1;
-    if (isBlankRow(row)) {
-      return;
+  if (!lan_deslan) {
+    errors.push(`${lineLabel}: lan_deslan obrigatorio.`);
+  } else if (lan_deslan.length > 150) {
+    errors.push(`${lineLabel}: lan_deslan excede 150 caracteres.`);
+  }
+
+  if (!Number.isFinite(lan_valor) || lan_valor <= 0) {
+    errors.push(`${lineLabel}: lan_valor deve ser maior que zero.`);
+  }
+
+  if (!isIsoDate(lan_datlan)) {
+    errors.push(`${lineLabel}: lan_datlan invalida. Use YYYY-MM-DD.`);
+  }
+
+  if (!lan_lanope) {
+    errors.push(`${lineLabel}: lan_lanope invalido.`);
+  } else if (!validationContext.operationSet.has(lan_lanope)) {
+    errors.push(`${lineLabel}: lan_lanope ${lan_lanope} nao existe.`);
+  } else if (auxDebitCredit) {
+    const operationType = normalizeDebitCreditCode(validationContext.operationTypeMap.get(lan_lanope));
+    if (operationType && operationType !== auxDebitCredit) {
+      errors.push(
+        `${lineLabel}: lan_lanope ${lan_lanope} nao corresponde ao tipo ${auxDebitCredit} do extrato.`
+      );
     }
+  }
 
-    const lan_idmem = parsePositiveInteger(row.lan_idmem);
-    const lan_lanope = parsePositiveInteger(row.lan_lanope);
-    const lan_idmin = parsePositiveInteger(row.lan_idmin);
-    const lan_deslan = String(row.lan_deslan || "").trim();
-    const lan_valor = parseMoneyInput(row.lan_valor);
-    const lan_datlan = String(row.lan_datlan || "").trim();
-    const auxDebitCredit = normalizeDebitCreditCode(row.aux_extrato_dc);
+  if (!lan_idmin) {
+    errors.push(`${lineLabel}: lan_idmin invalido.`);
+  } else if (!validationContext.ministrySet.has(lan_idmin)) {
+    errors.push(`${lineLabel}: lan_idmin ${lan_idmin} nao existe.`);
+  }
 
-    if (!lan_idmem) {
-      errors.push(`Linha ${line}: lan_idmem invalido.`);
-    } else if (!memberSet.has(lan_idmem)) {
-      errors.push(`Linha ${line}: lan_idmem ${lan_idmem} nao existe.`);
-    }
-
-    if (!lan_deslan) {
-      errors.push(`Linha ${line}: lan_deslan obrigatorio.`);
-    } else if (lan_deslan.length > 150) {
-      errors.push(`Linha ${line}: lan_deslan excede 150 caracteres.`);
-    }
-
-    if (!Number.isFinite(lan_valor) || lan_valor <= 0) {
-      errors.push(`Linha ${line}: lan_valor deve ser maior que zero.`);
-    }
-
-    if (!isIsoDate(lan_datlan)) {
-      errors.push(`Linha ${line}: lan_datlan invalida. Use YYYY-MM-DD.`);
-    }
-
-    if (!lan_lanope) {
-      errors.push(`Linha ${line}: lan_lanope invalido.`);
-    } else if (!operationSet.has(lan_lanope)) {
-      errors.push(`Linha ${line}: lan_lanope ${lan_lanope} nao existe.`);
-    } else if (auxDebitCredit) {
-      const operationType = normalizeDebitCreditCode(operationTypeMap.get(lan_lanope));
-      if (operationType && operationType !== auxDebitCredit) {
-        errors.push(
-          `Linha ${line}: lan_lanope ${lan_lanope} nao corresponde ao tipo ${auxDebitCredit} do extrato.`
-        );
-      }
-    }
-
-    if (!lan_idmin) {
-      errors.push(`Linha ${line}: lan_idmin invalido.`);
-    } else if (!ministrySet.has(lan_idmin)) {
-      errors.push(`Linha ${line}: lan_idmin ${lan_idmin} nao existe.`);
-    }
-
-    validRows.push({
+  return {
+    errors,
+    row: {
       lan_idmem,
       lan_deslan,
       lan_valor: Number(lan_valor.toFixed(2)),
       lan_datlan,
       lan_lanope,
       lan_idmin,
-    });
+    },
+  };
+}
+
+function collectRowsForSave() {
+  const rows = state.table.getData();
+  const validRows = [];
+  const errors = [];
+  const validationContext = buildValidationContext();
+
+  rows.forEach((row, index) => {
+    if (isBlankRow(row)) {
+      return;
+    }
+
+    const validation = validateRowForSave(row, `Linha ${index + 1}`, validationContext);
+    if (validation.errors.length > 0) {
+      errors.push(...validation.errors);
+      return;
+    }
+
+    validRows.push(validation.row);
   });
 
   if (errors.length > 0) {
@@ -568,6 +695,7 @@ async function fetchLookupsAndRows() {
   }
 
   createGrid(lookups, cadlan2Data.rows);
+  applyGridFilters();
 
   setStatus(`Dados carregados. ${cadlan2Data.rows.length} linha(s) na cadlan2.`, "success");
 }
@@ -632,6 +760,46 @@ async function handleSave() {
   }
 }
 
+async function handleSaveRow(rowComponent) {
+  const rowData = rowComponent.getData();
+  if (isBlankRow(rowData)) {
+    setStatus("A linha selecionada esta em branco.");
+    return;
+  }
+
+  const visiblePosition = rowComponent.getPosition(true);
+  const rowLabel = Number.isInteger(visiblePosition) ? `Linha ${visiblePosition}` : "Linha selecionada";
+
+  setBusy(true);
+  setStatus(`${rowLabel}: validando e salvando na cadlan2...`);
+
+  try {
+    const validationContext = buildValidationContext();
+    const validation = validateRowForSave(rowData, rowLabel, validationContext);
+    if (validation.errors.length > 0) {
+      throw new Error(validation.errors.join("\n"));
+    }
+
+    const payloadRow = validation.row;
+    if (isSavedCadlan2Row(rowData)) {
+      payloadRow.id = Number(rowData.id);
+    }
+
+    const payload = await requestJson("/cadlan2/row", {
+      method: "PUT",
+      body: JSON.stringify({ row: payloadRow }),
+    });
+
+    await rowComponent.update(payload.row);
+    applyGridFilters();
+    setStatus(`${rowLabel} salva com sucesso. ID ${payload.row.id}.`, "success");
+  } catch (error) {
+    setStatus(error.message, "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function handleCommit() {
   const shouldCommit = window.confirm(
     "Confirma o envio de todos os registros da cadlan2 para a cadlan? A cadlan2 sera limpa apos o envio."
@@ -683,6 +851,7 @@ async function handleImportFileSelected(event) {
     }
 
     await state.table.addData(importedRows, false);
+    applyGridFilters();
     setStatus(
       `${importedRows.length} lancamento(s) importado(s). Preencha lan_deslan e demais campos obrigatorios antes de salvar.`,
       "success"
@@ -695,6 +864,16 @@ async function handleImportFileSelected(event) {
   }
 }
 
+function handleFilterControlChanged() {
+  applyGridFilters();
+}
+
+function handleClearDateFilters() {
+  state.controls.dateFrom.value = "";
+  state.controls.dateTo.value = "";
+  applyGridFilters();
+}
+
 function bindControls() {
   state.controls.reload = document.getElementById("reloadButton");
   state.controls.import = document.getElementById("importButton");
@@ -703,6 +882,10 @@ function bindControls() {
   state.controls.save = document.getElementById("saveButton");
   state.controls.commit = document.getElementById("commitButton");
   state.controls.ofxFile = document.getElementById("ofxFileInput");
+  state.controls.showSaved = document.getElementById("showSavedCheckbox");
+  state.controls.dateFrom = document.getElementById("dateFromFilter");
+  state.controls.dateTo = document.getElementById("dateToFilter");
+  state.controls.clearDateFilter = document.getElementById("clearDateFilterButton");
 
   state.controls.reload.addEventListener("click", handleReload);
   state.controls.import.addEventListener("click", handleImportClick);
@@ -711,6 +894,10 @@ function bindControls() {
   state.controls.save.addEventListener("click", handleSave);
   state.controls.commit.addEventListener("click", handleCommit);
   state.controls.ofxFile.addEventListener("change", handleImportFileSelected);
+  state.controls.showSaved.addEventListener("change", handleFilterControlChanged);
+  state.controls.dateFrom.addEventListener("change", handleFilterControlChanged);
+  state.controls.dateTo.addEventListener("change", handleFilterControlChanged);
+  state.controls.clearDateFilter.addEventListener("click", handleClearDateFilters);
 }
 
 async function initialize() {
