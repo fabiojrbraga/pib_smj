@@ -97,6 +97,14 @@ function bindComboboxNavigation(cell) {
   });
 }
 
+function activateComboboxEditor(event, cell) {
+  if (state.busy) {
+    return;
+  }
+
+  cell.edit(true);
+}
+
 function lookupFormatter(lookupMap) {
   return (cell) => {
     const rawValue = cell.getValue();
@@ -478,7 +486,8 @@ function createGrid(lookups, rows) {
         field: "lan_idmem",
         width: 220,
         editor: "list",
-        editorParams: () => buildListEditorParams(memberOptions),
+        editorParams: (cell) => buildListEditorParams(memberOptions),
+        cellClick: activateComboboxEditor,
         formatter: lookupFormatter(memberMap),
         headerFilter: "input",
         cellEdited: (cell) => {
@@ -559,6 +568,7 @@ function createGrid(lookups, rows) {
             getOperationOptionsForRow(operationOptionGroups, debitCreditCode)
           );
         },
+        cellClick: activateComboboxEditor,
         formatter: lookupFormatter(operationMap),
         headerFilter: "input",
       },
@@ -567,7 +577,8 @@ function createGrid(lookups, rows) {
         field: "lan_idmin",
         width: 250,
         editor: "list",
-        editorParams: () => buildListEditorParams(ministryOptions),
+        editorParams: (cell) => buildListEditorParams(ministryOptions),
+        cellClick: activateComboboxEditor,
         formatter: lookupFormatter(ministryMap),
         headerFilter: "input",
       },
