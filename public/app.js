@@ -1045,7 +1045,7 @@ async function handleSaveRow(rowComponent) {
 
 async function handleCommit() {
   const shouldCommit = window.confirm(
-    "Confirma o envio de todos os registros da cadlan2 para a cadlan? A cadlan2 sera limpa apos o envio."
+    "Confirma o envio de todos os registros da cadlan2 para a cadlan? Os registros permanecerao na cadlan2."
   );
 
   if (!shouldCommit) {

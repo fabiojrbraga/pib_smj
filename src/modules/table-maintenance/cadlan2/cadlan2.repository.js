@@ -290,7 +290,6 @@ async function commitCadlan2ToCadlan() {
       `
     );
 
-    await connection.query("DELETE FROM cadlan2");
     return result.affectedRows;
   });
 }
