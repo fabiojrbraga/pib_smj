@@ -70,6 +70,7 @@ function buildListEditorParams(values) {
     autocomplete: true,
     allowEmpty: true,
     listOnEmpty: true,
+    filterDelay: 0,
     sort: "asc",
     freetext: false,
     verticalNavigation: "editor",
@@ -419,6 +420,10 @@ function createGrid(lookups, rows) {
     layout: "fitColumns",
     height: "65vh",
     data: rows,
+    keybindings: {
+      navUp: false,
+      navDown: false,
+    },
     resizableColumns: true,
     resizableColumnFit: true,
     layoutColumnsOnNewData: false,
