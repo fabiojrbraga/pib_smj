@@ -234,6 +234,15 @@ function saveButtonFormatter(cell) {
   `;
 }
 
+function applySavedRowClass(rowComponent) {
+  const rowElement = rowComponent.getElement();
+  if (!rowElement) {
+    return;
+  }
+
+  rowElement.classList.toggle("tabulator-row-saved", isSavedCadlan2Row(rowComponent.getData()));
+}
+
 function createGrid(lookups, rows) {
   const memberOptions = buildLookupOptions(lookups.members);
   const ministryOptions = buildLookupOptions(lookups.ministries);
@@ -264,6 +273,8 @@ function createGrid(lookups, rows) {
     clipboard: true,
     clipboardPasteParser: "range",
     clipboardPasteAction: "replace",
+    rowFormatter: applySavedRowClass,
+    rowUpdated: applySavedRowClass,
     rowHeader: {
       formatter: "rowSelection",
       titleFormatter: "rowSelection",
@@ -791,6 +802,7 @@ async function handleSaveRow(rowComponent) {
     });
 
     await rowComponent.update(payload.row);
+    rowComponent.reformat();
     applyGridFilters();
     setStatus(`${rowLabel} salva com sucesso. ID ${payload.row.id}.`, "success");
   } catch (error) {
