@@ -320,6 +320,18 @@ function applySavedRowClass(rowComponent) {
   rowElement.classList.toggle("tabulator-row-saved", isSavedCadlan2Row(rowComponent.getData()));
 }
 
+function auxDescriptionFormatter(cell) {
+  const description = String(cell.getValue() || "").trim();
+  if (!description) {
+    return "";
+  }
+
+  const content = document.createElement("span");
+  content.textContent = description;
+  content.title = description;
+  return content;
+}
+
 function createGrid(lookups, rows) {
   const memberOptions = buildLookupOptions(lookups.members);
   const ministryOptions = buildLookupOptions(lookups.ministries);
@@ -417,11 +429,7 @@ function createGrid(lookups, rows) {
         title: "aux_extrato_desc",
         field: "aux_extrato_desc",
         width: 440,
-        tooltip: (cellOrEvent, maybeCell) => {
-          const cell = maybeCell || cellOrEvent;
-          const description = String(cell?.getValue?.() || "").trim();
-          return description || false;
-        },
+        formatter: auxDescriptionFormatter,
         headerFilter: "input",
       },
       {
