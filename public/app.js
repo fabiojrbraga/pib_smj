@@ -421,6 +421,7 @@ function createGrid(lookups, rows) {
         field: "__save",
         width: 78,
         minWidth: 78,
+        download: false,
         hozAlign: "center",
         headerSort: false,
         resizable: false,
@@ -1075,6 +1076,32 @@ function handleImportClick() {
   fileInput.click();
 }
 
+function handleExportExcel() {
+  if (!state.table) {
+    setStatus("Grade ainda nao inicializada.", "error");
+    return;
+  }
+
+  if (typeof window.XLSX === "undefined") {
+    setStatus("Biblioteca de exportacao Excel nao carregada.", "error");
+    return;
+  }
+
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  const fileName = `cadlan2_${dateStamp}.xlsx`;
+
+  state.table.download(
+    "xlsx",
+    fileName,
+    {
+      sheetName: "cadlan2",
+    },
+    "active"
+  );
+
+  setStatus(`Download do arquivo ${fileName} iniciado.`, "success");
+}
+
 async function handleImportFileSelected(event) {
   const [file] = event.target.files || [];
   if (!file) {
@@ -1119,6 +1146,7 @@ function handleClearDateFilters() {
 
 function bindControls() {
   state.controls.reload = document.getElementById("reloadButton");
+  state.controls.exportExcel = document.getElementById("exportExcelButton");
   state.controls.import = document.getElementById("importButton");
   state.controls.add = document.getElementById("addButton");
   state.controls.remove = document.getElementById("removeButton");
@@ -1131,6 +1159,7 @@ function bindControls() {
   state.controls.clearDateFilter = document.getElementById("clearDateFilterButton");
 
   state.controls.reload.addEventListener("click", handleReload);
+  state.controls.exportExcel.addEventListener("click", handleExportExcel);
   state.controls.import.addEventListener("click", handleImportClick);
   state.controls.add.addEventListener("click", handleAddRow);
   state.controls.remove.addEventListener("click", handleDeleteRows);
