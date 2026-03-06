@@ -22,11 +22,8 @@ body {
 
 body {
   margin: 0;
-  padding: 0 16px 24px;
+  padding: 0;
   min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
   font-family: "Space Grotesk", sans-serif;
   color: var(--text-main);
   overflow-x: hidden;
@@ -37,8 +34,11 @@ body {
 }
 
 .page {
-  width: min(1320px, 100%);
-  margin: 32px 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 24px 16px;
   display: grid;
   gap: 18px;
   animation: fade-slide 380ms ease-out;
@@ -218,12 +218,15 @@ h1 {
 }
 
 #grid {
+  width: 100%;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border);
 }
 
 .tabulator {
+  width: 100%;
+  max-width: 100%;
   font-family: "Space Grotesk", sans-serif;
   font-size: 13px;
 }
@@ -300,13 +303,10 @@ h1 {
 }
 
 @media (max-width: 760px) {
-  body {
-    padding: 0 8px 16px;
-  }
-
   .page {
     width: 100%;
-    margin: 14px 0;
+    margin: 0;
+    padding: 14px 8px;
   }
 
   .panel,
