@@ -6,6 +6,7 @@ const state = {
   table: null,
   busy: false,
   controls: {},
+  pinnedSavedRowIds: new Set(),
 };
 
 function setStatus(message, type = "info") {
@@ -163,6 +164,20 @@ function isSavedCadlan2Row(row) {
   return row?.__saved_in_cadlan2 === true;
 }
 
+function getPersistedRowId(row) {
+  const id = Number(row?.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return null;
+  }
+
+  return id;
+}
+
+function isPinnedSavedRow(row) {
+  const id = getPersistedRowId(row);
+  return id !== null && state.pinnedSavedRowIds.has(id);
+}
+
 function markRowAsSavedInCadlan2(row) {
   return {
     ...row,
@@ -284,7 +299,7 @@ function applyGridFilters() {
   const dateRange = getActiveDateRange();
 
   state.table.setFilter((rowData) => {
-    if (!shouldShowSavedRows && isSavedCadlan2Row(rowData)) {
+    if (!shouldShowSavedRows && isSavedCadlan2Row(rowData) && !isPinnedSavedRow(rowData)) {
       return false;
     }
 
@@ -330,7 +345,11 @@ function applySavedRowClass(rowComponent) {
     return;
   }
 
-  rowElement.classList.toggle("tabulator-row-saved", isSavedCadlan2Row(rowComponent.getData()));
+  const rowData = rowComponent.getData();
+  const isSaved = isSavedCadlan2Row(rowData);
+
+  rowElement.classList.toggle("tabulator-row-saved", isSaved);
+  rowElement.classList.toggle("tabulator-row-saved-recent", isSaved && isPinnedSavedRow(rowData));
 }
 
 function auxDescriptionFormatter(cell) {
@@ -860,6 +879,8 @@ async function fetchLookupsAndRows() {
     state.table = null;
   }
 
+  state.pinnedSavedRowIds.clear();
+
   const localUnsavedRows = loadUnsavedRowsFromLocalStorage();
   const savedRowsFromDatabase = cadlan2Data.rows.map((row) => markRowAsSavedInCadlan2(row));
   createGrid(lookups, [...savedRowsFromDatabase, ...localUnsavedRows]);
@@ -929,6 +950,7 @@ async function handleSave() {
       body: JSON.stringify({ rows }),
     });
 
+    state.pinnedSavedRowIds.clear();
     clearUnsavedRowsFromLocalStorage();
     await fetchLookupsAndRows();
     setStatus(`${payload.message} Total de linhas: ${payload.total}.`, "success");
@@ -970,7 +992,13 @@ async function handleSaveRow(rowComponent) {
       body: JSON.stringify({ row: payloadRow }),
     });
 
-    await rowComponent.update(markRowAsSavedInCadlan2(payload.row));
+    const savedRow = markRowAsSavedInCadlan2(payload.row);
+    const savedRowId = getPersistedRowId(savedRow);
+    if (savedRowId !== null) {
+      state.pinnedSavedRowIds.add(savedRowId);
+    }
+
+    await rowComponent.update(savedRow);
     rowComponent.reformat();
     persistUnsavedRowsToLocalStorage();
     applyGridFilters();
