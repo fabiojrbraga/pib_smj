@@ -200,13 +200,42 @@ async function replaceCadlan2Batch(rows) {
   });
 }
 
-async function validateCadlan2DatabaseRows(db = pool) {
-  const [countRows] = await db.query("SELECT COUNT(*) AS total FROM cadlan2");
-  const totalRows = countRows[0].total;
+function normalizeSelectedIds(selectedIds) {
+  return [...new Set((Array.isArray(selectedIds) ? selectedIds : []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
+}
+
+async function validateCadlan2DatabaseRows(selectedIds, db = pool) {
+  const normalizedSelectedIds = normalizeSelectedIds(selectedIds);
+
+  if (normalizedSelectedIds.length === 0) {
+    return {
+      totalRows: 0,
+      missingSelectedIds: [],
+      missingMembers: [],
+      missingOperations: [],
+      missingMinistries: [],
+      debitRowsWithoutMinistry: [],
+    };
+  }
+
+  const [selectedRowIds] = await db.query(
+    `
+      SELECT id
+      FROM cadlan2
+      WHERE id IN (?)
+      ORDER BY id
+    `,
+    [normalizedSelectedIds]
+  );
+  const existingSelectedIds = selectedRowIds.map((item) => Number(item.id));
+  const existingSelectedIdsSet = new Set(existingSelectedIds);
+  const missingSelectedIds = normalizedSelectedIds.filter((id) => !existingSelectedIdsSet.has(id));
+  const totalRows = existingSelectedIds.length;
 
   if (totalRows === 0) {
     return {
       totalRows: 0,
+      missingSelectedIds,
       missingMembers: [],
       missingOperations: [],
       missingMinistries: [],
@@ -219,10 +248,12 @@ async function validateCadlan2DatabaseRows(db = pool) {
       SELECT DISTINCT c2.lan_idmem AS id
       FROM cadlan2 c2
       LEFT JOIN cadmem cm ON cm.id = c2.lan_idmem
-      WHERE cm.id IS NULL
+      WHERE c2.id IN (?)
+        AND cm.id IS NULL
         AND c2.lan_idmem > 0
       ORDER BY c2.lan_idmem
-    `
+    `,
+    [existingSelectedIds]
   );
 
   const [missingOperationsRows] = await db.query(
@@ -230,9 +261,11 @@ async function validateCadlan2DatabaseRows(db = pool) {
       SELECT DISTINCT c2.lan_lanope AS id
       FROM cadlan2 c2
       LEFT JOIN cadope co ON co.id = c2.lan_lanope
-      WHERE co.id IS NULL
+      WHERE c2.id IN (?)
+        AND co.id IS NULL
       ORDER BY c2.lan_lanope
-    `
+    `,
+    [existingSelectedIds]
   );
 
   const [missingMinistriesRows] = await db.query(
@@ -240,10 +273,12 @@ async function validateCadlan2DatabaseRows(db = pool) {
       SELECT DISTINCT c2.lan_idmin AS id
       FROM cadlan2 c2
       LEFT JOIN cadmin ci ON ci.id = c2.lan_idmin
-      WHERE ci.id IS NULL
+      WHERE c2.id IN (?)
+        AND ci.id IS NULL
         AND c2.lan_idmin > 0
       ORDER BY c2.lan_idmin
-    `
+    `,
+    [existingSelectedIds]
   );
 
   const [debitRowsWithoutMinistryRows] = await db.query(
@@ -251,14 +286,17 @@ async function validateCadlan2DatabaseRows(db = pool) {
       SELECT c2.id
       FROM cadlan2 c2
       LEFT JOIN cadope co ON co.id = c2.lan_lanope
-      WHERE COALESCE(NULLIF(UPPER(TRIM(c2.aux_extrato_dc)), ''), UPPER(TRIM(co.cad_credeb)), '') = 'D'
+      WHERE c2.id IN (?)
+        AND COALESCE(NULLIF(UPPER(TRIM(c2.aux_extrato_dc)), ''), UPPER(TRIM(co.cad_credeb)), '') = 'D'
         AND (c2.lan_idmin IS NULL OR c2.lan_idmin <= 0)
       ORDER BY c2.id
-    `
+    `,
+    [existingSelectedIds]
   );
 
   return {
     totalRows,
+    missingSelectedIds,
     missingMembers: missingMembersRows.map((item) => item.id),
     missingOperations: missingOperationsRows.map((item) => item.id),
     missingMinistries: missingMinistriesRows.map((item) => item.id),
@@ -266,7 +304,12 @@ async function validateCadlan2DatabaseRows(db = pool) {
   };
 }
 
-async function commitCadlan2ToCadlan() {
+async function commitCadlan2ToCadlan(selectedIds) {
+  const normalizedSelectedIds = normalizeSelectedIds(selectedIds);
+  if (normalizedSelectedIds.length === 0) {
+    return 0;
+  }
+
   return withTransaction(async (connection) => {
     const [result] = await connection.query(
       `
@@ -286,8 +329,10 @@ async function commitCadlan2ToCadlan() {
           lan_lanope,
           lan_idmin
         FROM cadlan2
+        WHERE id IN (?)
         ORDER BY id
-      `
+      `,
+      [normalizedSelectedIds]
     );
 
     return result.affectedRows;

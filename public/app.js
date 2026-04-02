@@ -1001,6 +1001,18 @@ function handleDeleteRows() {
   setStatus(`${selectedRows.length} linha(s) removida(s) da grade.`);
 }
 
+function getSelectedSavedCadlan2RowIds() {
+  const selectedRows = state.table?.getSelectedRows() || [];
+
+  const selectedSavedRowIds = selectedRows
+    .map((rowComponent) => rowComponent.getData())
+    .filter((rowData) => isSavedCadlan2Row(rowData))
+    .map((rowData) => getPersistedRowId(rowData))
+    .filter((id) => id !== null);
+
+  return [...new Set(selectedSavedRowIds)];
+}
+
 async function handleSave() {
   setBusy(true);
   setStatus("Validando e salvando na cadlan2...");
@@ -1073,8 +1085,23 @@ async function handleSaveRow(rowComponent) {
 }
 
 async function handleCommit() {
+  const selectedRows = state.table.getSelectedRows();
+  if (selectedRows.length === 0) {
+    setStatus("Selecione ao menos uma linha para enviar para a cadlan.");
+    return;
+  }
+
+  const selectedSavedRowIds = getSelectedSavedCadlan2RowIds();
+  if (selectedSavedRowIds.length === 0) {
+    setStatus("Selecione ao menos uma linha ja salva na cadlan2 para enviar.");
+    return;
+  }
+
+  const ignoredUnsavedRowsCount = selectedRows.length - selectedSavedRowIds.length;
   const shouldCommit = window.confirm(
-    "Confirma o envio de todos os registros da cadlan2 para a cadlan? Os registros permanecerao na cadlan2."
+    ignoredUnsavedRowsCount > 0
+      ? `Confirma o envio de ${selectedSavedRowIds.length} registro(s) selecionado(s) e salvo(s) na cadlan2 para a cadlan? ${ignoredUnsavedRowsCount} linha(s) selecionada(s) ainda nao estao salvas na cadlan2 e nao serao enviadas. Os registros permanecerao na cadlan2.`
+      : `Confirma o envio de ${selectedSavedRowIds.length} registro(s) selecionado(s) da cadlan2 para a cadlan? Os registros permanecerao na cadlan2.`
   );
 
   if (!shouldCommit) {
@@ -1082,12 +1109,14 @@ async function handleCommit() {
   }
 
   setBusy(true);
-  setStatus("Confirmando lote para cadlan...");
+  setStatus(`Confirmando ${selectedSavedRowIds.length} registro(s) selecionado(s) para cadlan...`);
 
   try {
     const payload = await requestJson("/cadlan2/commit", {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        selectedIds: selectedSavedRowIds,
+      }),
     });
 
     await fetchLookupsAndRows();

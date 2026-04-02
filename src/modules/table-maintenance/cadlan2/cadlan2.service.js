@@ -1,5 +1,5 @@
 const repository = require("./cadlan2.repository");
-const { validateCadlan2Batch, validateCadlan2Row } = require("./cadlan2.validation");
+const { validateCadlan2Batch, validateCadlan2Commit, validateCadlan2Row } = require("./cadlan2.validation");
 const { ValidationError } = require("../../shared/errors");
 
 function normalizeDebitCreditCode(value) {
@@ -88,23 +88,31 @@ async function saveCadlan2Row(payload) {
   };
 }
 
-async function commitCadlan2Batch() {
-  const validation = await repository.validateCadlan2DatabaseRows();
+async function commitCadlan2Batch(payload) {
+  const selectedIds = validateCadlan2Commit(payload);
+  const validation = await repository.validateCadlan2DatabaseRows(selectedIds);
   const hasErrors =
     validation.missingMembers.length > 0 ||
     validation.missingOperations.length > 0 ||
     validation.missingMinistries.length > 0 ||
     validation.debitRowsWithoutMinistry.length > 0;
 
-  if (hasErrors) {
-    throw new ValidationError("Nao foi possivel confirmar. Existem chaves estrangeiras invalidas na cadlan2.", validation);
-  }
-
   if (validation.totalRows === 0) {
-    throw new ValidationError("Nao ha registros na cadlan2 para confirmar.");
+    throw new ValidationError("Nenhum registro selecionado foi encontrado na cadlan2 para confirmar.", validation);
   }
 
-  const insertedRows = await repository.commitCadlan2ToCadlan();
+  if (validation.missingSelectedIds.length > 0) {
+    throw new ValidationError("Nao foi possivel confirmar. Alguns registros selecionados nao existem mais na cadlan2.", validation);
+  }
+
+  if (hasErrors) {
+    throw new ValidationError(
+      "Nao foi possivel confirmar. Existem chaves estrangeiras invalidas nos registros selecionados da cadlan2.",
+      validation
+    );
+  }
+
+  const insertedRows = await repository.commitCadlan2ToCadlan(selectedIds);
   return { insertedRows };
 }
 

@@ -119,6 +119,10 @@ const singleRowSchema = z.object({
   }),
 });
 
+const commitSelectionSchema = z.object({
+  selectedIds: z.array(z.coerce.number().int().positive()).min(1, "Selecione ao menos um registro"),
+});
+
 function normalizeRows(rows) {
   return rows.map((row) => ({
     lan_idmem: Number(row.lan_idmem),
@@ -171,7 +175,18 @@ function validateCadlan2Row(payload) {
   return normalizeRow(parsed.data.row);
 }
 
+function validateCadlan2Commit(payload) {
+  const parsed = commitSelectionSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    throw new ValidationError("Dados invalidos para confirmar envio para cadlan", parsed.error.flatten());
+  }
+
+  return [...new Set(parsed.data.selectedIds.map((id) => Number(id)))];
+}
+
 module.exports = {
   validateCadlan2Batch,
   validateCadlan2Row,
+  validateCadlan2Commit,
 };

@@ -37,9 +37,9 @@ async function saveRow(req, res, next) {
 
 async function commitBatch(req, res, next) {
   try {
-    const result = await service.commitCadlan2Batch();
+    const result = await service.commitCadlan2Batch(req.body);
     res.json({
-      message: "Registros enviados para cadlan com sucesso.",
+      message: "Registros selecionados enviados para cadlan com sucesso.",
       insertedRows: result.insertedRows,
     });
   } catch (error) {

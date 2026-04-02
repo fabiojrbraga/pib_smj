@@ -45,7 +45,7 @@ docker run --rm -p 3000:3000 -e DATABASE_URL="mariadb://usuario:senha@host-remot
 4. Conferir as colunas auxiliares do extrato (`aux_extrato_desc`, `aux_extrato_dc`) e preencher `lan_deslan`.
 5. Clicar em `Salvar na cadlan2`.
 6. Conferir os dados.
-7. Clicar em `Confirmar e enviar para cadlan` para copiar tudo em lote mantendo a `cadlan2`.
+7. Selecionar na grade as linhas ja salvas em `cadlan2` e clicar em `Confirmar selecionadas e enviar para cadlan` para copiar somente esse subconjunto mantendo a `cadlan2`.
 
 ## Estrutura preparada para expansao
 
