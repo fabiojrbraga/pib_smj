@@ -1,5 +1,21 @@
 const { pool } = require("../../../db/pool");
 const { withTransaction } = require("../../../db/transaction");
+const { ensureCadlan2Schema } = require("./cadlan2.schema");
+
+function normalizeExtractFitId(value) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+function normalizeExtractFitIds(values) {
+  return [
+    ...new Set(
+      (Array.isArray(values) ? values : [])
+        .map((value) => normalizeExtractFitId(value))
+        .filter((value) => value !== null)
+    ),
+  ];
+}
 
 async function listCadlan2(db = pool) {
   const [rows] = await db.query(
@@ -13,7 +29,8 @@ async function listCadlan2(db = pool) {
         lan_lanope,
         lan_idmin,
         aux_extrato_desc,
-        aux_extrato_dc
+        aux_extrato_dc,
+        aux_extrato_fitid
       FROM cadlan2
       ORDER BY id
     `
@@ -34,7 +51,8 @@ async function getCadlan2RowById(id, db = pool) {
         lan_lanope,
         lan_idmin,
         aux_extrato_desc,
-        aux_extrato_dc
+        aux_extrato_dc,
+        aux_extrato_fitid
       FROM cadlan2
       WHERE id = ?
       LIMIT 1
@@ -111,8 +129,9 @@ async function insertCadlan2Row(row, db = pool) {
         lan_lanope,
         lan_idmin,
         aux_extrato_desc,
-        aux_extrato_dc
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        aux_extrato_dc,
+        aux_extrato_fitid
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       row.lan_idmem,
@@ -123,6 +142,7 @@ async function insertCadlan2Row(row, db = pool) {
       row.lan_idmin ?? 0,
       row.aux_extrato_desc,
       row.aux_extrato_dc,
+      normalizeExtractFitId(row.aux_extrato_fitid),
     ]
   );
 
@@ -141,7 +161,8 @@ async function updateCadlan2Row(id, row, db = pool) {
         lan_lanope = ?,
         lan_idmin = ?,
         aux_extrato_desc = ?,
-        aux_extrato_dc = ?
+        aux_extrato_dc = ?,
+        aux_extrato_fitid = ?
       WHERE id = ?
     `,
     [
@@ -153,6 +174,7 @@ async function updateCadlan2Row(id, row, db = pool) {
       row.lan_idmin ?? 0,
       row.aux_extrato_desc,
       row.aux_extrato_dc,
+      normalizeExtractFitId(row.aux_extrato_fitid),
       id,
     ]
   );
@@ -177,6 +199,7 @@ async function replaceCadlan2Batch(rows) {
       item.lan_idmin ?? 0,
       item.aux_extrato_desc,
       item.aux_extrato_dc,
+      normalizeExtractFitId(item.aux_extrato_fitid),
     ]);
 
     await connection.query(
@@ -189,7 +212,8 @@ async function replaceCadlan2Batch(rows) {
           lan_lanope,
           lan_idmin,
           aux_extrato_desc,
-          aux_extrato_dc
+          aux_extrato_dc,
+          aux_extrato_fitid
         ) VALUES ?
       `,
       [values]
@@ -198,6 +222,30 @@ async function replaceCadlan2Batch(rows) {
     const [resultRows] = await connection.query("SELECT COUNT(*) AS total FROM cadlan2");
     return resultRows[0].total;
   });
+}
+
+async function findCadlan2RowsByExtractFitIds(fitIds, db = pool) {
+  const normalizedFitIds = normalizeExtractFitIds(fitIds);
+  if (normalizedFitIds.length === 0) {
+    return [];
+  }
+
+  const [rows] = await db.query(
+    `
+      SELECT
+        id,
+        aux_extrato_fitid
+      FROM cadlan2
+      WHERE aux_extrato_fitid IN (?)
+      ORDER BY id
+    `,
+    [normalizedFitIds]
+  );
+
+  return rows.map((row) => ({
+    id: Number(row.id),
+    aux_extrato_fitid: normalizeExtractFitId(row.aux_extrato_fitid),
+  }));
 }
 
 function normalizeSelectedIds(selectedIds) {
@@ -340,6 +388,7 @@ async function commitCadlan2ToCadlan(selectedIds) {
 }
 
 module.exports = {
+  ensureCadlan2Schema,
   listCadlan2,
   getCadlan2RowById,
   validateForeignKeys,
@@ -347,6 +396,7 @@ module.exports = {
   insertCadlan2Row,
   updateCadlan2Row,
   replaceCadlan2Batch,
+  findCadlan2RowsByExtractFitIds,
   validateCadlan2DatabaseRows,
   commitCadlan2ToCadlan,
 };

@@ -11,6 +11,51 @@ function normalizeDebitCreditCode(value) {
   return "";
 }
 
+function buildDuplicateFitIdErrors(rows) {
+  const fitIdLineMap = new Map();
+
+  rows.forEach((row, index) => {
+    const fitId = String(row.aux_extrato_fitid || "").trim();
+    if (!fitId) {
+      return;
+    }
+
+    if (!fitIdLineMap.has(fitId)) {
+      fitIdLineMap.set(fitId, []);
+    }
+
+    fitIdLineMap.get(fitId).push(index + 1);
+  });
+
+  return [...fitIdLineMap.entries()]
+    .filter(([, lines]) => lines.length > 1)
+    .map(([fitId, lines]) => `FITID ${fitId} duplicado nas linhas ${lines.join(", ")}.`);
+}
+
+async function validateUniqueExtractFitIdsForBatch(rows) {
+  const duplicateErrors = buildDuplicateFitIdErrors(rows);
+  if (duplicateErrors.length > 0) {
+    throw new ValidationError("Dados invalidos para cadlan2", { formErrors: duplicateErrors });
+  }
+}
+
+async function validateUniqueExtractFitIdForRow(row, currentRowId = null) {
+  const fitId = String(row.aux_extrato_fitid || "").trim();
+  if (!fitId) {
+    return;
+  }
+
+  const existingRows = await repository.findCadlan2RowsByExtractFitIds([fitId]);
+  const conflictingRow = existingRows.find((item) => Number(item.id) !== Number(currentRowId || 0));
+
+  if (conflictingRow) {
+    throw new ValidationError("Ja existe uma transacao OFX importada com este FITID na cadlan2.", {
+      conflictingRowId: conflictingRow.id,
+      conflictingFitId: conflictingRow.aux_extrato_fitid,
+    });
+  }
+}
+
 async function validateMinistryForDebitRows(rows) {
   const operationIds = rows.map((row) => row.lan_lanope);
   const operationTypeMap = await repository.getOperationDebitCreditTypes(operationIds);
@@ -33,11 +78,14 @@ async function validateMinistryForDebitRows(rows) {
 }
 
 async function getCadlan2Rows() {
+  await repository.ensureCadlan2Schema();
   return repository.listCadlan2();
 }
 
 async function saveCadlan2Batch(payload) {
+  await repository.ensureCadlan2Schema();
   const rows = validateCadlan2Batch(payload);
+  await validateUniqueExtractFitIdsForBatch(rows);
   await validateMinistryForDebitRows(rows);
   const foreignKeysValidation = await repository.validateForeignKeys(rows);
 
@@ -55,8 +103,10 @@ async function saveCadlan2Batch(payload) {
 }
 
 async function saveCadlan2Row(payload) {
+  await repository.ensureCadlan2Schema();
   const row = validateCadlan2Row(payload);
   const { id, ...rowData } = row;
+  await validateUniqueExtractFitIdForRow(rowData, id);
   await validateMinistryForDebitRows([rowData]);
 
   const foreignKeysValidation = await repository.validateForeignKeys([rowData]);
@@ -89,6 +139,7 @@ async function saveCadlan2Row(payload) {
 }
 
 async function commitCadlan2Batch(payload) {
+  await repository.ensureCadlan2Schema();
   const selectedIds = validateCadlan2Commit(payload);
   const validation = await repository.validateCadlan2DatabaseRows(selectedIds);
   const hasErrors =

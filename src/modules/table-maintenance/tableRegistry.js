@@ -12,6 +12,7 @@ const tableRegistry = Object.freeze({
       "lan_idmin",
       "aux_extrato_desc",
       "aux_extrato_dc",
+      "aux_extrato_fitid",
     ],
   },
 });

@@ -44,6 +44,17 @@ const auxDebitCreditSchema = z.preprocess(
     )
 );
 
+const auxExtractFitIdSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    return String(value).trim();
+  },
+  z.string().max(120)
+);
+
 const memberIdSchema = z.preprocess(
   (value) => {
     if (value === null || value === undefined) {
@@ -92,6 +103,7 @@ const rowSchema = z.object({
   lan_idmin: ministryIdSchema,
   aux_extrato_desc: auxDescriptionSchema,
   aux_extrato_dc: auxDebitCreditSchema,
+  aux_extrato_fitid: auxExtractFitIdSchema,
 });
 
 const optionalIdSchema = z.preprocess(
@@ -133,6 +145,7 @@ function normalizeRows(rows) {
     lan_idmin: Number(row.lan_idmin),
     aux_extrato_desc: row.aux_extrato_desc.trim(),
     aux_extrato_dc: row.aux_extrato_dc,
+    aux_extrato_fitid: row.aux_extrato_fitid,
   }));
 }
 
@@ -146,6 +159,7 @@ function normalizeRow(row) {
     lan_idmin: Number(row.lan_idmin),
     aux_extrato_desc: row.aux_extrato_desc.trim(),
     aux_extrato_dc: row.aux_extrato_dc,
+    aux_extrato_fitid: row.aux_extrato_fitid,
   };
 
   if (Number.isInteger(row.id) && row.id > 0) {

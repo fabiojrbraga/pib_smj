@@ -37,7 +37,7 @@ docker run --rm -p 3000:3000 -e DATABASE_URL="mariadb://usuario:senha@host-remot
 ## Fluxo da tela
 
 1. Preencher ou colar linhas na grade da `cadlan2`.
-2. Opcional: clicar em `Importar OFX` para carregar o extrato bancario.
+2. Opcional: clicar em `Importar OFX` para carregar o extrato bancario. O `FITID` da transacao sera salvo em `aux_extrato_fitid` e lancamentos ja importados serao ignorados.
 3. Usar os combobox/lookups para:
    - `lan_idmem` (membro ativo)
    - `lan_lanope` (plano/tipo de operacao)

@@ -248,7 +248,8 @@ function isCompletelyBlankRow(row) {
     isBlank(row.lan_lanope) &&
     isBlank(row.lan_idmin) &&
     isBlank(row.aux_extrato_desc) &&
-    isBlank(row.aux_extrato_dc)
+    isBlank(row.aux_extrato_dc) &&
+    isBlank(row.aux_extrato_fitid)
   );
 }
 
@@ -262,7 +263,22 @@ function normalizeUnsavedRowForStorage(row) {
     lan_idmin: row.lan_idmin ?? "",
     aux_extrato_desc: row.aux_extrato_desc ?? "",
     aux_extrato_dc: row.aux_extrato_dc ?? "",
+    aux_extrato_fitid: row.aux_extrato_fitid ?? "",
   };
+}
+
+function normalizeExtractFitId(value) {
+  return String(value || "").trim();
+}
+
+function buildImportedFitIdSet(rowsData = null) {
+  const sourceRows = Array.isArray(rowsData) ? rowsData : state.table?.getData() || [];
+
+  return new Set(
+    sourceRows
+      .map((row) => normalizeExtractFitId(row.aux_extrato_fitid))
+      .filter((fitId) => fitId)
+  );
 }
 
 function persistUnsavedRowsToLocalStorage(rowsData = null) {
@@ -566,6 +582,12 @@ function createGrid(lookups, rows) {
         headerFilter: "input",
       },
       {
+        title: "aux_extrato_fitid",
+        field: "aux_extrato_fitid",
+        width: 190,
+        headerFilter: "input",
+      },
+      {
         title: "lan_deslan",
         field: "lan_deslan",
         width: 440,
@@ -790,22 +812,35 @@ function buildOfxDescription(transactionBlock) {
 function parseOfxTransactions(ofxText) {
   const normalizedOfx = String(ofxText || "").replace(/\r\n/g, "\n");
   const transactionMatches = [...normalizedOfx.matchAll(/<STMTTRN>([\s\S]*?)(?=<STMTTRN>|<\/BANKTRANLIST>|$)/gi)];
+  const importedFitIds = buildImportedFitIdSet();
+  const newRows = [];
+  let skippedImportedCount = 0;
 
-  return transactionMatches
-    .map((match) => {
-      const transactionBlock = match[1];
-      const amount = parseOfxAmount(extractTagValue(transactionBlock, "TRNAMT"));
-      const trnType = extractTagValue(transactionBlock, "TRNTYPE");
-      const postedDate = extractTagValue(transactionBlock, "DTPOSTED");
-      const userDate = extractTagValue(transactionBlock, "DTUSER");
-      const date = parseOfxDate(postedDate || userDate);
-      const description = buildOfxDescription(transactionBlock);
+  transactionMatches.forEach((match) => {
+    const transactionBlock = match[1];
+    const amount = parseOfxAmount(extractTagValue(transactionBlock, "TRNAMT"));
+    const trnType = extractTagValue(transactionBlock, "TRNTYPE");
+    const postedDate = extractTagValue(transactionBlock, "DTPOSTED");
+    const userDate = extractTagValue(transactionBlock, "DTUSER");
+    const date = parseOfxDate(postedDate || userDate);
+    const description = buildOfxDescription(transactionBlock);
+    const fitId = normalizeExtractFitId(extractTagValue(transactionBlock, "FITID"));
 
-      if (!Number.isFinite(amount) || amount === 0) {
-        return null;
+    if (!Number.isFinite(amount) || amount === 0) {
+      return;
+    }
+
+    if (fitId) {
+      if (importedFitIds.has(fitId)) {
+        skippedImportedCount += 1;
+        return;
       }
 
-      return markRowAsUnsavedInCadlan2({
+      importedFitIds.add(fitId);
+    }
+
+    newRows.push(
+      markRowAsUnsavedInCadlan2({
         lan_idmem: "",
         lan_deslan: "",
         lan_valor: Number(Math.abs(amount).toFixed(2)),
@@ -814,9 +849,15 @@ function parseOfxTransactions(ofxText) {
         lan_idmin: "",
         aux_extrato_desc: description,
         aux_extrato_dc: deriveDebitCredit(trnType, amount),
-      });
-    })
-    .filter((item) => Boolean(item));
+        aux_extrato_fitid: fitId,
+      })
+    );
+  });
+
+  return {
+    rows: newRows,
+    skippedImportedCount,
+  };
 }
 
 async function readTextFileWithFallback(file) {
@@ -853,6 +894,7 @@ function validateRowForSave(row, lineLabel, validationContext) {
   const lan_datlan = String(row.lan_datlan || "").trim();
   const auxExtractDescription = String(row.aux_extrato_desc || "").trim();
   const rawAuxDebitCredit = String(row.aux_extrato_dc || "").trim();
+  const auxExtractFitId = normalizeExtractFitId(row.aux_extrato_fitid);
   const auxDebitCredit = normalizeDebitCreditCode(rawAuxDebitCredit);
   const operationDebitCredit = lan_lanope
     ? normalizeDebitCreditCode(validationContext.operationTypeMap.get(lan_lanope))
@@ -881,6 +923,10 @@ function validateRowForSave(row, lineLabel, validationContext) {
 
   if (auxExtractDescription.length > 300) {
     errors.push(`${lineLabel}: aux_extrato_desc excede 300 caracteres.`);
+  }
+
+  if (auxExtractFitId.length > 120) {
+    errors.push(`${lineLabel}: aux_extrato_fitid excede 120 caracteres.`);
   }
 
   if (rawAuxDebitCredit && !auxDebitCredit) {
@@ -921,6 +967,7 @@ function validateRowForSave(row, lineLabel, validationContext) {
       lan_idmin: lan_idmin === null ? 0 : lan_idmin,
       aux_extrato_desc: auxExtractDescription,
       aux_extrato_dc: auxDebitCredit,
+      aux_extrato_fitid: auxExtractFitId,
     },
   };
 }
@@ -1011,6 +1058,7 @@ function handleAddRow() {
       lan_idmin: "",
       aux_extrato_desc: "",
       aux_extrato_dc: "",
+      aux_extrato_fitid: "",
     }),
     true
   );
@@ -1199,9 +1247,17 @@ async function handleImportFileSelected(event) {
 
   try {
     const fileText = await readTextFileWithFallback(file);
-    const importedRows = parseOfxTransactions(fileText);
+    const { rows: importedRows, skippedImportedCount } = parseOfxTransactions(fileText);
 
     if (importedRows.length === 0) {
+      if (skippedImportedCount > 0) {
+        setStatus(
+          `Nenhum novo lancamento foi importado. ${skippedImportedCount} transacao(oes) ja existente(s) na grade/cadlan2 foram ignorada(s).`,
+          "success"
+        );
+        return;
+      }
+
       throw new Error("Nenhum lancamento valido foi encontrado no OFX.");
     }
 
@@ -1209,7 +1265,11 @@ async function handleImportFileSelected(event) {
     persistUnsavedRowsToLocalStorage();
     applyGridFilters();
     setStatus(
-      `${importedRows.length} lancamento(s) importado(s). Preencha lan_deslan e demais campos obrigatorios antes de salvar.`,
+      `${importedRows.length} lancamento(s) importado(s).${
+        skippedImportedCount > 0
+          ? ` ${skippedImportedCount} transacao(oes) ja existente(s) na grade/cadlan2 foram ignorada(s).`
+          : ""
+      } Preencha lan_deslan e demais campos obrigatorios antes de salvar.`,
       "success"
     );
   } catch (error) {
