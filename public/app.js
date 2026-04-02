@@ -369,6 +369,31 @@ function applyGridFilters() {
 
     return true;
   });
+
+  window.requestAnimationFrame(() => {
+    clearSelectionOutsideActiveRows();
+  });
+}
+
+function getActiveRowComponents() {
+  return state.table?.getRows("active") || [];
+}
+
+function getActiveSelectedRows() {
+  return getActiveRowComponents().filter((rowComponent) => rowComponent.isSelected());
+}
+
+function clearSelectionOutsideActiveRows() {
+  if (!state.table) {
+    return;
+  }
+
+  const activeRows = new Set(getActiveRowComponents());
+  state.table.getSelectedRows().forEach((rowComponent) => {
+    if (!activeRows.has(rowComponent)) {
+      rowComponent.deselect();
+    }
+  });
 }
 
 function saveButtonFormatter(cell) {
@@ -455,6 +480,9 @@ function createGrid(lookups, rows) {
     rowHeader: {
       formatter: "rowSelection",
       titleFormatter: "rowSelection",
+      titleFormatterParams: {
+        rowRange: "active",
+      },
       headerSort: false,
       hozAlign: "center",
       width: 54,
@@ -990,7 +1018,7 @@ function handleAddRow() {
 }
 
 function handleDeleteRows() {
-  const selectedRows = state.table.getSelectedRows();
+  const selectedRows = getActiveSelectedRows();
   if (selectedRows.length === 0) {
     setStatus("Selecione ao menos uma linha para exclusao.");
     return;
@@ -1002,7 +1030,7 @@ function handleDeleteRows() {
 }
 
 function getSelectedSavedCadlan2RowIds() {
-  const selectedRows = state.table?.getSelectedRows() || [];
+  const selectedRows = getActiveSelectedRows();
 
   const selectedSavedRowIds = selectedRows
     .map((rowComponent) => rowComponent.getData())
@@ -1085,7 +1113,7 @@ async function handleSaveRow(rowComponent) {
 }
 
 async function handleCommit() {
-  const selectedRows = state.table.getSelectedRows();
+  const selectedRows = getActiveSelectedRows();
   if (selectedRows.length === 0) {
     setStatus("Selecione ao menos uma linha para enviar para a cadlan.");
     return;
