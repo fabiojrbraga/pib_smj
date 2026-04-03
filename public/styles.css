@@ -514,6 +514,17 @@ h1 {
   color: #8a4f1b;
 }
 
+.assistant-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.assistant-card-apply {
+  width: auto;
+}
+
 .assistant-card-list,
 .assistant-card-examples,
 .assistant-card-warnings {

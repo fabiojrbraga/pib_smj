@@ -256,6 +256,41 @@ function buildAiSuggestionDetails(suggestion, operationMap, ministryMap) {
   return details.join("");
 }
 
+async function applySingleAiSuggestion(suggestion) {
+  const rowReference = state.ai.rowMap.get(suggestion.clientRowId);
+  if (!rowReference?.rowComponent) {
+    return {
+      updated: false,
+      updatedFields: 0,
+      rowLabel: "Linha indisponivel",
+      message: "A linha associada a esta sugestao nao esta mais disponivel na grade.",
+    };
+  }
+
+  const rowComponent = rowReference.rowComponent;
+  const rowData = rowComponent.getData();
+  const updates = buildAiFieldUpdates(rowData, suggestion.suggestedFields, state.ai.overwrite);
+
+  if (Object.keys(updates).length === 0) {
+    return {
+      updated: false,
+      updatedFields: 0,
+      rowLabel: rowReference.rowLabel,
+      message: "Nao ha alteracoes aplicaveis para esta sugestao no modo atual.",
+    };
+  }
+
+  await rowComponent.update(updates);
+  rowComponent.reformat();
+
+  return {
+    updated: true,
+    updatedFields: Object.keys(updates).length,
+    rowLabel: rowReference.rowLabel,
+    message: `${rowReference.rowLabel} atualizada com ${Object.keys(updates).length} campo(s) sugerido(s) pela IA.`,
+  };
+}
+
 function renderAiSuggestions() {
   if (!state.controls.aiSummary || !state.controls.aiResults || !state.controls.aiApply) {
     return;
@@ -308,6 +343,18 @@ function renderAiSuggestions() {
     const emptyStateMarkup = hasApplicableUpdates
       ? ""
       : `<p class="assistant-card-empty">Sem alteracoes aplicaveis para esta linha no modo atual.</p>`;
+    const singleApplyButtonMarkup = `
+      <div class="assistant-card-actions">
+        <button
+          class="btn btn-ghost assistant-card-apply"
+          type="button"
+          data-ai-apply-single="${escapeHtml(suggestion.clientRowId)}"
+          ${hasApplicableUpdates ? "" : "disabled"}
+        >
+          Aplicar esta sugestao
+        </button>
+      </div>
+    `;
 
     cards.push(`
       <article class="assistant-card">
@@ -325,6 +372,7 @@ function renderAiSuggestions() {
         }
         <p class="assistant-card-reason">${escapeHtml(suggestion.reason || "Sem justificativa informada.")}</p>
         ${emptyStateMarkup}
+        ${singleApplyButtonMarkup}
         ${
           warningsMarkup
             ? `<ul class="assistant-card-warnings">${warningsMarkup}</ul>`
@@ -1911,23 +1959,13 @@ async function handleAiApplySuggestions() {
   let updatedFields = 0;
 
   for (const suggestion of state.ai.suggestions) {
-    const rowReference = state.ai.rowMap.get(suggestion.clientRowId);
-    if (!rowReference?.rowComponent) {
+    const result = await applySingleAiSuggestion(suggestion);
+    if (!result.updated) {
       continue;
     }
 
-    const rowComponent = rowReference.rowComponent;
-    const rowData = rowComponent.getData();
-    const updates = buildAiFieldUpdates(rowData, suggestion.suggestedFields, state.ai.overwrite);
-
-    if (Object.keys(updates).length === 0) {
-      continue;
-    }
-
-    await rowComponent.update(updates);
-    rowComponent.reformat();
     updatedRows += 1;
-    updatedFields += Object.keys(updates).length;
+    updatedFields += result.updatedFields;
   }
 
   persistUnsavedRowsToLocalStorage();
@@ -1943,6 +1981,45 @@ async function handleAiApplySuggestions() {
     `${updatedRows} linha(s) atualizada(s) com ${updatedFields} campo(s) sugerido(s) pela IA. Revise e salve a grade quando concluir.`,
     "success"
   );
+}
+
+async function handleAiResultsClick(event) {
+  const applyButton = event.target.closest("[data-ai-apply-single]");
+  if (!applyButton || state.busy) {
+    return;
+  }
+
+  const clientRowId = String(applyButton.dataset.aiApplySingle || "").trim();
+  if (!clientRowId) {
+    return;
+  }
+
+  const suggestion = state.ai.suggestions.find((item) => item.clientRowId === clientRowId);
+  if (!suggestion) {
+    setStatus("A sugestao selecionada nao foi encontrada.", "error");
+    return;
+  }
+
+  setBusy(true);
+  setStatus("Aplicando sugestao individual da IA...");
+
+  try {
+    const result = await applySingleAiSuggestion(suggestion);
+    persistUnsavedRowsToLocalStorage();
+    applyGridFilters();
+    renderAiSuggestions();
+
+    if (!result.updated) {
+      setStatus(result.message);
+      return;
+    }
+
+    setStatus(`${result.message} Revise e salve a grade quando concluir.`, "success");
+  } catch (error) {
+    setStatus(error.message, "error");
+  } finally {
+    setBusy(false);
+  }
 }
 
 function handleFilterControlChanged() {
@@ -1986,6 +2063,7 @@ function bindControls() {
   state.controls.aiClose.addEventListener("click", handleAiPanelClose);
   state.controls.aiRun.addEventListener("click", handleAiGenerateSuggestions);
   state.controls.aiApply.addEventListener("click", handleAiApplySuggestions);
+  state.controls.aiResults.addEventListener("click", handleAiResultsClick);
   state.controls.add.addEventListener("click", handleAddRow);
   state.controls.remove.addEventListener("click", handleDeleteRows);
   state.controls.save.addEventListener("click", handleSave);
