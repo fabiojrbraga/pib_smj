@@ -1,6 +1,6 @@
 const API_BASE = "/api";
 const UNSAVED_ROWS_STORAGE_KEY = "cadlan2_unsaved_rows_v1";
-const COMBOBOX_FIELDS = new Set(["lan_idmem", "lan_lanope", "lan_idmin"]);
+const COMBOBOX_FIELDS = new Set(["lan_lanope"]);
 const COMBOBOX_NAV_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter"]);
 
 const state = {
@@ -9,6 +9,17 @@ const state = {
   busy: false,
   controls: {},
   pinnedSavedRowIds: new Set(),
+  ai: {
+    enabled: false,
+    limits: {
+      maxRowsPerRequest: 20,
+      maxExamplesPerRow: 4,
+    },
+    suggestions: [],
+    globalWarnings: [],
+    rowMap: new Map(),
+    overwrite: false,
+  },
 };
 
 function setStatus(message, type = "info") {
@@ -31,6 +42,311 @@ function setBusy(busy) {
       element.disabled = busy;
     }
   });
+}
+
+function setAiPanelVisible(visible) {
+  if (!state.controls.aiPanel || !state.controls.aiSuggest) {
+    return;
+  }
+
+  state.controls.aiPanel.hidden = !visible;
+  state.controls.aiSuggest.setAttribute("aria-expanded", visible ? "true" : "false");
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function resetAiSuggestions() {
+  state.ai.suggestions = [];
+  state.ai.globalWarnings = [];
+  state.ai.rowMap = new Map();
+  state.ai.overwrite = false;
+  renderAiSuggestions();
+}
+
+function setAiAvailability(payload = null) {
+  const enabled = payload?.enabled === true;
+
+  state.ai.enabled = enabled;
+  if (payload?.limits) {
+    state.ai.limits = {
+      ...state.ai.limits,
+      ...payload.limits,
+    };
+  }
+
+  if (!state.controls.aiSuggest || !state.controls.aiPanel) {
+    return;
+  }
+
+  state.controls.aiSuggest.hidden = !enabled;
+  state.controls.aiSuggest.disabled = !enabled;
+
+  if (!enabled) {
+    setAiPanelVisible(false);
+    resetAiSuggestions();
+  }
+}
+
+function formatAiConfidence(confidence) {
+  const normalized = Number(confidence);
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    return "Confianca baixa";
+  }
+
+  return `Confianca ${Math.round(normalized * 100)}%`;
+}
+
+function isEmptyLookupValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return true;
+  }
+
+  const parsed = Number(value);
+  return !Number.isInteger(parsed) || parsed <= 0;
+}
+
+function buildAiFieldUpdates(rowData, suggestedFields, overwrite) {
+  const updates = {};
+
+  const suggestedDescription = String(suggestedFields.lan_deslan || "").trim();
+  if (
+    suggestedDescription &&
+    (overwrite || isBlank(rowData.lan_deslan)) &&
+    String(rowData.lan_deslan || "").trim() !== suggestedDescription
+  ) {
+    updates.lan_deslan = suggestedDescription;
+  }
+
+  const suggestedOperation = parsePositiveInteger(suggestedFields.lan_lanope);
+  if (
+    suggestedOperation &&
+    (overwrite || isEmptyLookupValue(rowData.lan_lanope)) &&
+    Number(rowData.lan_lanope) !== suggestedOperation
+  ) {
+    updates.lan_lanope = suggestedOperation;
+  }
+
+  const suggestedMinistry = parsePositiveInteger(suggestedFields.lan_idmin);
+  if (
+    suggestedMinistry &&
+    (overwrite || isEmptyLookupValue(rowData.lan_idmin)) &&
+    Number(rowData.lan_idmin) !== suggestedMinistry
+  ) {
+    updates.lan_idmin = suggestedMinistry;
+  }
+
+  return updates;
+}
+
+function getAiScopeRowComponents(scope) {
+  if (scope === "visible") {
+    return getActiveRowComponents();
+  }
+
+  return getActiveSelectedRows();
+}
+
+function buildAiRowLabel(rowComponent, fallbackIndex) {
+  const visiblePosition = rowComponent.getPosition(true);
+  if (Number.isInteger(visiblePosition)) {
+    return `Linha ${visiblePosition}`;
+  }
+
+  return `Linha ${fallbackIndex + 1}`;
+}
+
+function collectRowsForAiSuggestion() {
+  const scope = state.controls.aiScope?.value || "selected";
+  const overwrite = state.controls.aiOverwrite?.checked === true;
+  const prompt = String(state.controls.aiPrompt?.value || "").trim();
+  const rowComponents = getAiScopeRowComponents(scope).filter((rowComponent) => {
+    const rowData = rowComponent.getData();
+    return !isBlankRow(rowData) || !isBlank(rowData.aux_extrato_desc);
+  });
+
+  if (rowComponents.length === 0) {
+    throw new Error(
+      scope === "visible"
+        ? "Nao ha linhas visiveis adequadas para enviar para a IA."
+        : "Selecione ao menos uma linha para gerar sugestoes por IA."
+    );
+  }
+
+  if (rowComponents.length > state.ai.limits.maxRowsPerRequest) {
+    throw new Error(
+      `A IA aceita no maximo ${state.ai.limits.maxRowsPerRequest} linha(s) por solicitacao.`
+    );
+  }
+
+  const requestTimestamp = Date.now();
+  const rowMap = new Map();
+  const rows = rowComponents.map((rowComponent, index) => {
+    const rowData = rowComponent.getData();
+    const persistedId = getPersistedRowId(rowData);
+    const clientRowId =
+      persistedId !== null
+        ? `saved-${persistedId}`
+        : `draft-${requestTimestamp}-${index + 1}-${Math.floor(Math.random() * 100000)}`;
+
+    rowMap.set(clientRowId, {
+      rowComponent,
+      rowLabel: buildAiRowLabel(rowComponent, index),
+    });
+
+    return {
+      clientRowId,
+      id: persistedId || undefined,
+      lan_idmem: parseMemberIdForSave(rowData.lan_idmem) ?? 0,
+      lan_deslan: String(rowData.lan_deslan || "").trim(),
+      lan_valor: Number.isFinite(parseMoneyInput(rowData.lan_valor))
+        ? Number(parseMoneyInput(rowData.lan_valor).toFixed(2))
+        : null,
+      lan_datlan: String(rowData.lan_datlan || "").trim(),
+      lan_lanope: parsePositiveInteger(rowData.lan_lanope) || 0,
+      lan_idmin: parseMinistryIdForSave(rowData.lan_idmin) ?? 0,
+      aux_extrato_desc: String(rowData.aux_extrato_desc || "").trim(),
+      aux_extrato_dc: normalizeDebitCreditCode(rowData.aux_extrato_dc),
+      aux_extrato_fitid: normalizeExtractFitId(rowData.aux_extrato_fitid),
+    };
+  });
+
+  return {
+    scope,
+    overwrite,
+    prompt,
+    rows,
+    rowMap,
+  };
+}
+
+function buildAiSuggestionDetails(suggestion, operationMap, ministryMap) {
+  const details = [];
+
+  if (suggestion.suggestedFields.lan_deslan) {
+    details.push(
+      `<li><strong>lan_deslan</strong>: ${escapeHtml(suggestion.suggestedFields.lan_deslan)}</li>`
+    );
+  }
+
+  if (suggestion.suggestedFields.lan_lanope) {
+    details.push(
+      `<li><strong>lan_lanope</strong>: ${escapeHtml(
+        operationMap.get(Number(suggestion.suggestedFields.lan_lanope)) ||
+          `${suggestion.suggestedFields.lan_lanope} - ID nao encontrado`
+      )}</li>`
+    );
+  }
+
+  if (suggestion.suggestedFields.lan_idmin) {
+    details.push(
+      `<li><strong>lan_idmin</strong>: ${escapeHtml(
+        ministryMap.get(Number(suggestion.suggestedFields.lan_idmin)) ||
+          `${suggestion.suggestedFields.lan_idmin} - ID nao encontrado`
+      )}</li>`
+    );
+  }
+
+  return details.join("");
+}
+
+function renderAiSuggestions() {
+  if (!state.controls.aiSummary || !state.controls.aiResults || !state.controls.aiApply) {
+    return;
+  }
+
+  const operationMap = buildLookupMap(state.lookups?.operations || []);
+  const ministryMap = buildLookupMap(state.lookups?.ministries || []);
+  const cards = [];
+  let applicableRows = 0;
+
+  if (state.ai.suggestions.length === 0) {
+    state.controls.aiSummary.textContent =
+      "Selecione algumas linhas e use a IA somente quando fizer sentido.";
+    state.controls.aiResults.innerHTML = "";
+    state.controls.aiApply.disabled = true;
+    return;
+  }
+
+  state.ai.suggestions.forEach((suggestion, index) => {
+    const rowReference = state.ai.rowMap.get(suggestion.clientRowId);
+    const rowComponent = rowReference?.rowComponent || null;
+    const rowLabel = rowReference?.rowLabel || `Linha ${index + 1}`;
+    const rowData = rowComponent?.getData() || {};
+    const applicableUpdates = buildAiFieldUpdates(
+      rowData,
+      suggestion.suggestedFields,
+      state.ai.overwrite
+    );
+    const hasApplicableUpdates = Object.keys(applicableUpdates).length > 0;
+
+    if (hasApplicableUpdates) {
+      applicableRows += 1;
+    }
+
+    const supportingExamplesMarkup = (suggestion.supportingExamples || [])
+      .map(
+        (example) =>
+          `<li>${escapeHtml(example.aux_extrato_desc)} <span class="assistant-chip">${Math.round(
+            Number(example.similarity || 0) * 100
+          )}%</span></li>`
+      )
+      .join("");
+
+    const warningsMarkup = (suggestion.warnings || [])
+      .filter((warning) => !isBlank(warning))
+      .map((warning) => `<li>${escapeHtml(warning)}</li>`)
+      .join("");
+
+    const suggestionDetails = buildAiSuggestionDetails(suggestion, operationMap, ministryMap);
+    const emptyStateMarkup = hasApplicableUpdates
+      ? ""
+      : `<p class="assistant-card-empty">Sem alteracoes aplicaveis para esta linha no modo atual.</p>`;
+
+    cards.push(`
+      <article class="assistant-card">
+        <div class="assistant-card-header">
+          <h3 class="assistant-card-title">${escapeHtml(rowLabel)}</h3>
+          <span class="assistant-card-confidence">${escapeHtml(
+            formatAiConfidence(suggestion.confidence)
+          )}</span>
+        </div>
+        <p class="assistant-card-copy">${escapeHtml(String(rowData.aux_extrato_desc || "(Sem aux_extrato_desc)"))}</p>
+        ${
+          suggestionDetails
+            ? `<ul class="assistant-card-list">${suggestionDetails}</ul>`
+            : `<p class="assistant-card-empty">A IA optou por nao sugerir campos para esta linha.</p>`
+        }
+        <p class="assistant-card-reason">${escapeHtml(suggestion.reason || "Sem justificativa informada.")}</p>
+        ${emptyStateMarkup}
+        ${
+          warningsMarkup
+            ? `<ul class="assistant-card-warnings">${warningsMarkup}</ul>`
+            : ""
+        }
+        ${
+          supportingExamplesMarkup
+            ? `<ul class="assistant-card-examples">${supportingExamplesMarkup}</ul>`
+            : ""
+        }
+      </article>
+    `);
+  });
+
+  const globalWarnings = state.ai.globalWarnings
+    .filter((warning) => !isBlank(warning))
+    .join(" ");
+  state.controls.aiSummary.textContent = `${state.ai.suggestions.length} linha(s) analisada(s). ${applicableRows} com sugestoes aplicaveis.${
+    globalWarnings ? ` ${globalWarnings}` : ""
+  }`;
+  state.controls.aiResults.innerHTML = cards.join("");
+  state.controls.aiApply.disabled = applicableRows === 0;
 }
 
 async function requestJson(path, options = {}) {
@@ -75,6 +391,236 @@ function buildListEditorParams(values) {
     freetext: false,
     verticalNavigation: "editor",
   };
+}
+
+function normalizeLookupSearch(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function filterLookupOptionsForEditor(options, term) {
+  const normalizedTerm = normalizeLookupSearch(term);
+  const maxItems = 140;
+
+  if (!normalizedTerm) {
+    return options.slice(0, maxItems);
+  }
+
+  return options
+    .filter((option) => {
+      const labelMatch = normalizeLookupSearch(option.label).includes(normalizedTerm);
+      const valueMatch = normalizeLookupSearch(option.value).includes(normalizedTerm);
+      return labelMatch || valueMatch;
+    })
+    .slice(0, maxItems);
+}
+
+function findExactLookupOption(options, typedValue) {
+  const normalizedTypedValue = normalizeLookupSearch(typedValue);
+  if (!normalizedTypedValue) {
+    return null;
+  }
+
+  return (
+    options.find((option) => normalizeLookupSearch(option.label) === normalizedTypedValue) ||
+    options.find((option) => normalizeLookupSearch(option.value) === normalizedTypedValue) ||
+    null
+  );
+}
+
+function lookupComboboxEditor(cell, onRendered, success, cancel, editorParams = {}) {
+  const baseOptions = Array.isArray(editorParams.values) ? editorParams.values : [];
+  const sortedOptions = [...baseOptions].sort((a, b) =>
+    String(a.label || "").localeCompare(String(b.label || ""), "pt-BR")
+  );
+
+  const container = document.createElement("div");
+  container.className = "lookup-editor";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "lookup-editor-input";
+  input.autocomplete = "off";
+
+  const list = document.createElement("div");
+  list.className = "lookup-editor-list";
+
+  container.appendChild(input);
+  container.appendChild(list);
+
+  const currentValue = Number(cell.getValue());
+  const currentOption = sortedOptions.find((option) => Number(option.value) === currentValue);
+
+  if (currentOption) {
+    input.value = currentOption.label;
+  }
+
+  let filteredOptions = filterLookupOptionsForEditor(sortedOptions, input.value);
+  let activeIndex = filteredOptions.length > 0 ? 0 : -1;
+  let finalized = false;
+
+  function commitOption(option) {
+    if (finalized) {
+      return;
+    }
+
+    finalized = true;
+    if (!option) {
+      success("");
+      return;
+    }
+
+    success(option.value);
+  }
+
+  function cancelEditor() {
+    if (finalized) {
+      return;
+    }
+
+    finalized = true;
+    cancel();
+  }
+
+  function renderList() {
+    list.innerHTML = "";
+
+    if (filteredOptions.length === 0) {
+      const emptyState = document.createElement("div");
+      emptyState.className = "lookup-editor-empty";
+      emptyState.textContent = "Sem resultados";
+      list.appendChild(emptyState);
+      return;
+    }
+
+    filteredOptions.forEach((option, index) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "lookup-editor-item";
+      item.textContent = option.label;
+
+      if (index === activeIndex) {
+        item.classList.add("is-active");
+      }
+
+      item.addEventListener("mouseenter", () => {
+        activeIndex = index;
+        renderList();
+      });
+
+      item.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        commitOption(option);
+      });
+
+      list.appendChild(item);
+    });
+  }
+
+  function refreshFilter(resetActive = true) {
+    filteredOptions = filterLookupOptionsForEditor(sortedOptions, input.value);
+
+    if (filteredOptions.length === 0) {
+      activeIndex = -1;
+    } else if (resetActive || activeIndex < 0 || activeIndex >= filteredOptions.length) {
+      activeIndex = 0;
+    }
+
+    renderList();
+  }
+
+  function moveActive(step) {
+    if (filteredOptions.length === 0) {
+      return;
+    }
+
+    activeIndex = (activeIndex + step + filteredOptions.length) % filteredOptions.length;
+    renderList();
+  }
+
+  function getCandidateOption() {
+    if (filteredOptions.length > 0 && activeIndex >= 0 && activeIndex < filteredOptions.length) {
+      return filteredOptions[activeIndex];
+    }
+
+    if (filteredOptions.length > 0) {
+      return filteredOptions[0];
+    }
+
+    return findExactLookupOption(sortedOptions, input.value);
+  }
+
+  input.addEventListener("input", () => {
+    refreshFilter(true);
+  });
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveActive(1);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveActive(-1);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      const option = getCandidateOption();
+      if (option) {
+        commitOption(option);
+      } else if (isBlank(input.value)) {
+        commitOption(null);
+      } else {
+        cancelEditor();
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelEditor();
+    }
+  });
+
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      if (finalized) {
+        return;
+      }
+
+      if (isBlank(input.value)) {
+        commitOption(null);
+        return;
+      }
+
+      const option = findExactLookupOption(sortedOptions, input.value);
+      if (option) {
+        commitOption(option);
+        return;
+      }
+
+      cancelEditor();
+    }, 120);
+  });
+
+  onRendered(() => {
+    input.focus();
+    input.select();
+    refreshFilter(true);
+  });
+
+  return container;
 }
 
 function bindComboboxNavigation(cell) {
@@ -529,8 +1075,10 @@ function createGrid(lookups, rows) {
         title: "lan_idmem",
         field: "lan_idmem",
         width: 220,
-        editor: "list",
-        editorParams: (cell) => buildListEditorParams(memberOptions),
+        editor: lookupComboboxEditor,
+        editorParams: (cell) => ({
+          values: memberOptions,
+        }),
         cellClick: activateComboboxEditor,
         formatter: lookupFormatter(memberMap),
         headerFilter: "input",
@@ -626,8 +1174,10 @@ function createGrid(lookups, rows) {
         title: "lan_idmin",
         field: "lan_idmin",
         width: 250,
-        editor: "list",
-        editorParams: (cell) => buildListEditorParams(ministryOptions),
+        editor: lookupComboboxEditor,
+        editorParams: (cell) => ({
+          values: ministryOptions,
+        }),
         cellClick: activateComboboxEditor,
         formatter: lookupFormatter(ministryMap),
         headerFilter: "input",
@@ -1004,12 +1554,26 @@ function collectRowsForSave() {
 }
 
 async function fetchLookupsAndRows() {
-  const [lookups, cadlan2Data] = await Promise.all([
+  const [lookupsResult, cadlan2Result, aiStatusResult] = await Promise.allSettled([
     requestJson("/lookups"),
     requestJson("/cadlan2"),
+    requestJson("/cadlan2/ai/status"),
   ]);
 
+  if (lookupsResult.status !== "fulfilled") {
+    throw lookupsResult.reason;
+  }
+
+  if (cadlan2Result.status !== "fulfilled") {
+    throw cadlan2Result.reason;
+  }
+
+  const lookups = lookupsResult.value;
+  const cadlan2Data = cadlan2Result.value;
+
   state.lookups = lookups;
+  setAiAvailability(aiStatusResult.status === "fulfilled" ? aiStatusResult.value : null);
+  resetAiSuggestions();
 
   if (state.table) {
     state.table.destroy();
@@ -1280,6 +1844,107 @@ async function handleImportFileSelected(event) {
   }
 }
 
+function handleAiPanelToggle() {
+  if (!state.ai.enabled) {
+    return;
+  }
+
+  setAiPanelVisible(state.controls.aiPanel.hidden);
+}
+
+function handleAiPanelClose() {
+  setAiPanelVisible(false);
+}
+
+async function handleAiGenerateSuggestions() {
+  if (!state.ai.enabled) {
+    return;
+  }
+
+  let aiRequest;
+  try {
+    aiRequest = collectRowsForAiSuggestion();
+  } catch (error) {
+    setStatus(error.message, "error");
+    return;
+  }
+
+  setBusy(true);
+  setStatus(`Gerando sugestoes de IA para ${aiRequest.rows.length} linha(s)...`);
+
+  try {
+    const payload = await requestJson("/cadlan2/ai/suggest", {
+      method: "POST",
+      body: JSON.stringify({
+        prompt: aiRequest.prompt,
+        scope: aiRequest.scope,
+        overwrite: aiRequest.overwrite,
+        rows: aiRequest.rows,
+      }),
+    });
+
+    state.ai.suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+    state.ai.globalWarnings = Array.isArray(payload.globalWarnings) ? payload.globalWarnings : [];
+    state.ai.rowMap = aiRequest.rowMap;
+    state.ai.overwrite = aiRequest.overwrite;
+    renderAiSuggestions();
+    setAiPanelVisible(true);
+    setStatus(
+      `${payload.message || "Sugestoes de IA geradas."} ${state.ai.suggestions.length} linha(s) analisada(s).`,
+      "success"
+    );
+  } catch (error) {
+    resetAiSuggestions();
+    setStatus(error.message, "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function handleAiApplySuggestions() {
+  if (state.ai.suggestions.length === 0) {
+    setStatus("Nao ha sugestoes de IA prontas para aplicar.");
+    return;
+  }
+
+  let updatedRows = 0;
+  let updatedFields = 0;
+
+  for (const suggestion of state.ai.suggestions) {
+    const rowReference = state.ai.rowMap.get(suggestion.clientRowId);
+    if (!rowReference?.rowComponent) {
+      continue;
+    }
+
+    const rowComponent = rowReference.rowComponent;
+    const rowData = rowComponent.getData();
+    const updates = buildAiFieldUpdates(rowData, suggestion.suggestedFields, state.ai.overwrite);
+
+    if (Object.keys(updates).length === 0) {
+      continue;
+    }
+
+    await rowComponent.update(updates);
+    rowComponent.reformat();
+    updatedRows += 1;
+    updatedFields += Object.keys(updates).length;
+  }
+
+  persistUnsavedRowsToLocalStorage();
+  applyGridFilters();
+  renderAiSuggestions();
+
+  if (updatedRows === 0) {
+    setStatus("A IA nao trouxe alteracoes aplicaveis para o modo selecionado.");
+    return;
+  }
+
+  setStatus(
+    `${updatedRows} linha(s) atualizada(s) com ${updatedFields} campo(s) sugerido(s) pela IA. Revise e salve a grade quando concluir.`,
+    "success"
+  );
+}
+
 function handleFilterControlChanged() {
   applyGridFilters();
 }
@@ -1294,6 +1959,16 @@ function bindControls() {
   state.controls.reload = document.getElementById("reloadButton");
   state.controls.exportExcel = document.getElementById("exportExcelButton");
   state.controls.import = document.getElementById("importButton");
+  state.controls.aiSuggest = document.getElementById("aiSuggestButton");
+  state.controls.aiPanel = document.getElementById("aiAssistantPanel");
+  state.controls.aiClose = document.getElementById("aiCloseButton");
+  state.controls.aiScope = document.getElementById("aiScopeSelect");
+  state.controls.aiOverwrite = document.getElementById("aiOverwriteCheckbox");
+  state.controls.aiPrompt = document.getElementById("aiPromptInput");
+  state.controls.aiRun = document.getElementById("aiRunButton");
+  state.controls.aiApply = document.getElementById("aiApplyButton");
+  state.controls.aiSummary = document.getElementById("aiSummary");
+  state.controls.aiResults = document.getElementById("aiResults");
   state.controls.add = document.getElementById("addButton");
   state.controls.remove = document.getElementById("removeButton");
   state.controls.save = document.getElementById("saveButton");
@@ -1307,6 +1982,10 @@ function bindControls() {
   state.controls.reload.addEventListener("click", handleReload);
   state.controls.exportExcel.addEventListener("click", handleExportExcel);
   state.controls.import.addEventListener("click", handleImportClick);
+  state.controls.aiSuggest.addEventListener("click", handleAiPanelToggle);
+  state.controls.aiClose.addEventListener("click", handleAiPanelClose);
+  state.controls.aiRun.addEventListener("click", handleAiGenerateSuggestions);
+  state.controls.aiApply.addEventListener("click", handleAiApplySuggestions);
   state.controls.add.addEventListener("click", handleAddRow);
   state.controls.remove.addEventListener("click", handleDeleteRows);
   state.controls.save.addEventListener("click", handleSave);

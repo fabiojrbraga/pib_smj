@@ -14,7 +14,7 @@
       href="https://unpkg.com/tabulator-tables@6.3.0/dist/css/tabulator.min.css"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260306-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260403-1" />
   </head>
   <body>
     <main class="page">
@@ -32,6 +32,9 @@
           <button id="reloadButton" class="btn btn-secondary" type="button">Recarregar</button>
           <button id="exportExcelButton" class="btn btn-secondary" type="button">Baixar Excel</button>
           <button id="importButton" class="btn btn-secondary" type="button">Importar OFX</button>
+          <button id="aiSuggestButton" class="btn btn-secondary" type="button" hidden>
+            Sugerir via IA
+          </button>
           <button id="addButton" class="btn btn-secondary" type="button">Nova linha</button>
           <button id="removeButton" class="btn btn-secondary" type="button">Excluir selecionadas</button>
           <button id="saveButton" class="btn btn-primary" type="button">Salvar na cadlan2</button>
@@ -56,6 +59,52 @@
         </div>
 
         <input id="ofxFileInput" class="hidden-file-input" type="file" accept=".ofx,.qfx,text/plain" />
+        <section id="aiAssistantPanel" class="assistant-panel" hidden>
+          <div class="assistant-panel-header">
+            <div>
+              <p class="assistant-eyebrow">Opcional</p>
+              <h2 class="assistant-title">Preenchimento assistido por IA</h2>
+            </div>
+            <button id="aiCloseButton" class="btn btn-ghost" type="button">Fechar</button>
+          </div>
+          <p class="assistant-copy">
+            Gere sugestoes para <strong>lan_deslan</strong>, <strong>lan_lanope</strong> e
+            <strong>lan_idmin</strong> sem alterar o fluxo tradicional da grade. Nada e salvo
+            automaticamente.
+          </p>
+          <div class="assistant-form-grid">
+            <label class="assistant-field" for="aiScopeSelect">
+              Escopo
+              <select id="aiScopeSelect" class="assistant-select">
+                <option value="selected">Linhas selecionadas</option>
+                <option value="visible">Linhas visiveis</option>
+              </select>
+            </label>
+            <label class="assistant-toggle" for="aiOverwriteCheckbox">
+              <input id="aiOverwriteCheckbox" type="checkbox" />
+              Permitir sobrescrever campos ja preenchidos
+            </label>
+          </div>
+          <label class="assistant-field assistant-field-full" for="aiPromptInput">
+            Instrucoes opcionais
+            <textarea
+              id="aiPromptInput"
+              class="assistant-textarea"
+              rows="4"
+              placeholder="Ex.: para despesas de mercado, usar descricao curta e o ministerio 4 quando houver boa confianca."
+            ></textarea>
+          </label>
+          <div class="assistant-actions">
+            <button id="aiRunButton" class="btn btn-primary" type="button">Gerar sugestoes</button>
+            <button id="aiApplyButton" class="btn btn-secondary" type="button" disabled>
+              Aplicar sugestoes
+            </button>
+          </div>
+          <div id="aiSummary" class="assistant-summary">
+            Selecione algumas linhas e use a IA somente quando fizer sentido.
+          </div>
+          <div id="aiResults" class="assistant-results"></div>
+        </section>
         <div id="statusBar" class="status">Carregando dados...</div>
         <div id="grid"></div>
       </section>
@@ -63,6 +112,6 @@
 
     <script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./app.js?v=20260402-1"></script>
+    <script src="./app.js?v=20260403-1"></script>
   </body>
 </html>

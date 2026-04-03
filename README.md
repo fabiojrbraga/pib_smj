@@ -50,3 +50,15 @@ docker run --rm -p 3000:3000 -e DATABASE_URL="mariadb://usuario:senha@host-remot
 ## Estrutura preparada para expansao
 
 Ja existe um catalogo/registro de tabelas em `src/modules/table-maintenance/tableRegistry.js` para permitir adicionar novas telas de manutencao futuramente sem alterar a base principal.
+
+## IA generativa opcional
+
+O preenchimento assistido por IA e totalmente opcional e nao interfere no fluxo tradicional da grid.
+
+Para habilitar:
+
+1. Defina `OPENAI_API_KEY`.
+2. Defina `OPENAI_SYSTEM_PROMPT`.
+3. Opcionalmente ajuste `OPENAI_MODEL`, `OPENAI_TIMEOUT_MS`, `CADLAN2_AI_MAX_ROWS` e `CADLAN2_AI_MAX_EXAMPLES`.
+
+Sem essas variaveis, o botao `Sugerir via IA` nao sera exibido na interface.
