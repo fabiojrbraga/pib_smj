@@ -1057,6 +1057,38 @@ function auxDescriptionFormatter(cell) {
   return content;
 }
 
+function extractDescriptionFormatter(cell) {
+  const description = String(cell.getValue() || "").trim();
+  if (!description) {
+    return "";
+  }
+
+  const content = document.createElement("span");
+  content.className = "extract-description";
+  content.title = description;
+
+  const text = document.createElement("span");
+  text.className = "extract-description-text";
+  text.textContent = description;
+
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("class", "extract-description-icon");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  icon.setAttribute("focusable", "false");
+
+  const eyePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  eyePath.setAttribute("d", "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z");
+
+  const pupilPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  pupilPath.setAttribute("d", "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z");
+
+  icon.append(eyePath, pupilPath);
+  content.append(text, icon);
+
+  return content;
+}
+
 function formatDateForDisplay(value) {
   const textValue = String(value || "").trim();
   const isoDate = textValue.slice(0, 10);
@@ -1098,7 +1130,7 @@ function createGrid(lookups, rows) {
     resizableColumnFit: true,
     layoutColumnsOnNewData: false,
     persistenceMode: "local",
-    persistenceID: "cadlan2-grid-layout-v20260526-8",
+    persistenceID: "cadlan2-grid-layout-v20260526-10",
     persistence: {
       columns: true,
     },
@@ -1203,23 +1235,25 @@ function createGrid(lookups, rows) {
       {
         title: "Data",
         field: "lan_datlan",
-        width: 140,
+        width: 112,
         editor: "date",
         formatter: dateDisplayFormatter,
         accessorDownload: (value) => formatDateForDisplay(value),
       },
       {
-        title: "Déb/Créd",
+        title: "D/C",
         field: "aux_extrato_dc",
-        width: 86,
-        minWidth: 78,
+        width: 44,
+        minWidth: 44,
+        maxWidth: 44,
         hozAlign: "center",
+        headerSort: false,
       },
       {
         title: "Desc Extrato",
         field: "aux_extrato_desc",
-        width: 440,
-        formatter: auxDescriptionFormatter,
+        width: 352,
+        formatter: extractDescriptionFormatter,
         headerFilter: "input",
       },
       {
@@ -1233,7 +1267,8 @@ function createGrid(lookups, rows) {
       {
         title: "Valor",
         field: "lan_valor",
-        width: 180,
+        width: 108,
+        minWidth: 98,
         editor: "input",
         hozAlign: "right",
         formatter: (cell) => formatMoney(cell.getValue()),

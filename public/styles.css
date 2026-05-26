@@ -336,6 +336,33 @@ h1 {
   color: #f5fbf9;
 }
 
+.extract-description {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.extract-description-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extract-description-icon {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: #0b8f6a;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.72;
+}
+
 .row-save-btn {
   width: 32px;
   height: 32px;
