@@ -1079,7 +1079,7 @@ function createGrid(lookups, rows) {
     resizableColumnFit: true,
     layoutColumnsOnNewData: false,
     persistenceMode: "local",
-    persistenceID: "cadlan2-grid-layout",
+    persistenceID: "cadlan2-grid-layout-v20260526-2",
     persistence: {
       columns: true,
     },
@@ -1112,7 +1112,7 @@ function createGrid(lookups, rows) {
     },
     columns: [
       {
-        title: "Salvar",
+        title: "",
         field: "__save",
         width: 78,
         minWidth: 78,
@@ -1141,7 +1141,7 @@ function createGrid(lookups, rows) {
           isSavedCadlan2Row(data) ? "Salvo" : "Somente local",
       },
       {
-        title: "Membro",
+        title: "Mebro",
         field: "lan_idmem",
         width: 220,
         editor: lookupComboboxEditor,
@@ -1186,26 +1186,26 @@ function createGrid(lookups, rows) {
         editor: "date",
       },
       {
-        title: "Debito/Credito",
+        title: "Déb/Créd",
         field: "aux_extrato_dc",
         width: 140,
         hozAlign: "center",
       },
       {
-        title: "Descricao do extrato",
+        title: "Desc Extrato",
         field: "aux_extrato_desc",
         width: 440,
         formatter: auxDescriptionFormatter,
         headerFilter: "input",
       },
       {
-        title: "ID do extrato",
+        title: "ID Extrato",
         field: "aux_extrato_fitid",
         width: 190,
         headerFilter: "input",
       },
       {
-        title: "Descricao",
+        title: "Desc Relatório",
         field: "lan_deslan",
         width: 440,
         editor: "input",
@@ -1223,7 +1223,7 @@ function createGrid(lookups, rows) {
         bottomCalcFormatter: (cell) => formatMoney(cell.getValue()),
       },
       {
-        title: "Operacao",
+        title: "Conta",
         field: "lan_lanope",
         width: 280,
         editor: "list",
@@ -1240,7 +1240,7 @@ function createGrid(lookups, rows) {
         headerFilter: "input",
       },
       {
-        title: "Ministerio",
+        title: "Ministério",
         field: "lan_idmin",
         width: 250,
         editor: lookupComboboxEditor,
