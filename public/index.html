@@ -14,30 +14,28 @@
       href="https://unpkg.com/tabulator-tables@6.3.0/dist/css/tabulator.min.css"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260526-8" />
+    <link rel="stylesheet" href="./styles.css?v=20260526-9" />
   </head>
   <body>
     <main class="page">
       <section class="hero">
         <p class="eyebrow">Financeiro</p>
-        <h1>Grid de manutenção da tabela cadlan2</h1>
+        <h1>Apontamentos de Movimentos Financeiros</h1>
         <p class="subtitle">
-          Preencha, valide e confirme os lançamentos antes do envio definitivo para a tabela
-          <strong>cadlan</strong>.
+          Preencha, valide e confirme os lançamentos antes do envio definitivo.
         </p>
       </section>
 
       <section class="panel">
         <div class="toolbar">
+          <button id="importButton" class="btn btn-primary" type="button">Importar OFX</button>
           <button id="reloadButton" class="btn btn-secondary" type="button">Recarregar</button>
           <button id="exportExcelButton" class="btn btn-secondary" type="button">Baixar Excel</button>
-          <button id="importButton" class="btn btn-secondary" type="button">Importar OFX</button>
           <button id="aiSuggestButton" class="btn btn-secondary" type="button" hidden>
             Sugerir via IA
           </button>
           <button id="addButton" class="btn btn-secondary" type="button">Nova linha</button>
           <button id="removeButton" class="btn btn-secondary" type="button">Excluir selecionadas</button>
-          <button id="saveButton" class="btn btn-primary" type="button">Salvar na cadlan2</button>
           <button id="commitButton" class="btn btn-warning" type="button">
             Confirmar selecionadas e enviar para cadlan
           </button>
@@ -45,7 +43,7 @@
         <div class="filterbar">
           <label class="toggle-control" for="showSavedCheckbox">
             <input id="showSavedCheckbox" type="checkbox" checked />
-            Mostrar registros ja salvos na cadlan2
+            Mostrar registros ja salvos
           </label>
           <label class="date-filter" for="dateFromFilter">
             De
@@ -112,6 +110,6 @@
 
     <script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./app.js?v=20260526-8"></script>
+    <script src="./app.js?v=20260526-9"></script>
   </body>
 </html>

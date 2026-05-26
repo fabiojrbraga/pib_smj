@@ -2135,7 +2135,7 @@ function bindControls() {
   state.controls.aiResults.addEventListener("click", handleAiResultsClick);
   state.controls.add.addEventListener("click", handleAddRow);
   state.controls.remove.addEventListener("click", handleDeleteRows);
-  state.controls.save.addEventListener("click", handleSave);
+  state.controls.save?.addEventListener("click", handleSave);
   state.controls.commit.addEventListener("click", handleCommit);
   state.controls.ofxFile.addEventListener("change", handleImportFileSelected);
   state.controls.showSaved.addEventListener("change", handleFilterControlChanged);
