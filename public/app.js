@@ -1098,7 +1098,7 @@ function createGrid(lookups, rows) {
     resizableColumnFit: true,
     layoutColumnsOnNewData: false,
     persistenceMode: "local",
-    persistenceID: "cadlan2-grid-layout-v20260526-6",
+    persistenceID: "cadlan2-grid-layout-v20260526-8",
     persistence: {
       columns: true,
     },
@@ -1122,7 +1122,9 @@ function createGrid(lookups, rows) {
       },
       headerSort: false,
       hozAlign: "center",
-      width: 38,
+      width: 28,
+      minWidth: 28,
+      maxWidth: 28,
       resizable: false,
       cellClick: (event, cell) => {
         event.stopPropagation();

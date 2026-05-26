@@ -298,6 +298,15 @@ h1 {
   background: #ecf5f1;
 }
 
+.tabulator .tabulator-row-header {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.tabulator .tabulator-row-header input[type="checkbox"] {
+  margin: 0;
+}
+
 .tabulator .tabulator-row.tabulator-row-saved:not(.tabulator-selected) {
   background: rgba(11, 143, 106, 0.09);
   box-shadow: inset 4px 0 0 rgba(6, 121, 90, 0.45);
