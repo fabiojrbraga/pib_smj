@@ -351,9 +351,13 @@ h1 {
 }
 
 .row-save-btn svg {
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .row-save-btn-saved {
@@ -365,7 +369,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 96px;
+  min-width: 42px;
   padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid transparent;

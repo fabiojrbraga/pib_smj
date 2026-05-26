@@ -1015,7 +1015,10 @@ function saveButtonFormatter(cell) {
   return `
     <button class="${buttonClass}" type="button" title="${actionLabel}" aria-label="${actionLabel}">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M4 2h13l3 3v17H4V2zm2 2v4h10V4H6zm0 8v8h12v-8H6z"></path>
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"></path>
+        <path d="M7 3v6h8"></path>
+        <path d="M12 13v5"></path>
+        <path d="m9.5 15.5 2.5 2.5 2.5-2.5"></path>
       </svg>
     </button>
   `;
@@ -1023,7 +1026,7 @@ function saveButtonFormatter(cell) {
 
 function statusFormatter(cell) {
   const isSaved = isSavedCadlan2Row(cell.getRow().getData());
-  const label = isSaved ? "Salvo" : "Somente local";
+  const label = isSaved ? "Sim" : "Não";
   const statusClass = isSaved ? "row-status row-status-saved" : "row-status row-status-local";
 
   return `<span class="${statusClass}">${label}</span>`;
@@ -1079,7 +1082,7 @@ function createGrid(lookups, rows) {
     resizableColumnFit: true,
     layoutColumnsOnNewData: false,
     persistenceMode: "local",
-    persistenceID: "cadlan2-grid-layout-v20260526-2",
+    persistenceID: "cadlan2-grid-layout-v20260526-3",
     persistence: {
       columns: true,
     },
@@ -1129,16 +1132,16 @@ function createGrid(lookups, rows) {
         },
       },
       {
-        title: "Status",
+        title: "Salvo",
         field: "__saved_in_cadlan2",
-        width: 140,
-        minWidth: 130,
+        width: 86,
+        minWidth: 78,
         hozAlign: "center",
         headerSort: true,
         resizable: false,
         formatter: statusFormatter,
         accessorDownload: (value, data) =>
-          isSavedCadlan2Row(data) ? "Salvo" : "Somente local",
+          isSavedCadlan2Row(data) ? "Sim" : "Não",
       },
       {
         title: "Mebro",
