@@ -1082,7 +1082,7 @@ function createGrid(lookups, rows) {
     resizableColumnFit: true,
     layoutColumnsOnNewData: false,
     persistenceMode: "local",
-    persistenceID: "cadlan2-grid-layout-v20260526-3",
+    persistenceID: "cadlan2-grid-layout-v20260526-4",
     persistence: {
       columns: true,
     },
@@ -1106,7 +1106,7 @@ function createGrid(lookups, rows) {
       },
       headerSort: false,
       hozAlign: "center",
-      width: 54,
+      width: 38,
       resizable: false,
       cellClick: (event, cell) => {
         event.stopPropagation();
@@ -1202,12 +1202,6 @@ function createGrid(lookups, rows) {
         headerFilter: "input",
       },
       {
-        title: "ID Extrato",
-        field: "aux_extrato_fitid",
-        width: 190,
-        headerFilter: "input",
-      },
-      {
         title: "Desc Relatório",
         field: "lan_deslan",
         width: 440,
@@ -1252,6 +1246,14 @@ function createGrid(lookups, rows) {
         }),
         cellClick: activateComboboxEditor,
         formatter: lookupFormatter(ministryMap),
+        headerFilter: "input",
+      },
+      {
+        title: "ID Extrato",
+        field: "aux_extrato_fitid",
+        width: 98,
+        minWidth: 92,
+        formatter: auxDescriptionFormatter,
         headerFilter: "input",
       },
     ],
