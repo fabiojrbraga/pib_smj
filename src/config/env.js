@@ -98,6 +98,7 @@ function parseAiConfig() {
 const env = {
   port: Number(process.env.PORT || 3000),
   dbConfig: parseDatabaseUrl(),
+  operationConfirmationPassword: getOptionalEnv("OPERATION_CONFIRMATION_PASSWORD"),
   ai: parseAiConfig(),
 };
 

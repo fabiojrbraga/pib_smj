@@ -27,11 +27,13 @@ npm run start
 
 Abrir: `http://localhost:3000`
 
+Defina tambem `OPERATION_CONFIRMATION_PASSWORD` no `.env` ou nas variaveis do ambiente. Essa senha e exigida para excluir linhas, usar sugestoes de IA e confirmar o envio para a `cadlan`.
+
 ## Execucao com Docker
 
 ```powershell
 docker build -t pib-smj:local .
-docker run --rm -p 3000:3000 -e DATABASE_URL="mariadb://usuario:senha@host-remoto:3306/nome_banco" pib-smj:local
+docker run --rm -p 3000:3000 -e DATABASE_URL="mariadb://usuario:senha@host-remoto:3306/nome_banco" -e OPERATION_CONFIRMATION_PASSWORD="sua-senha" pib-smj:local
 ```
 
 ## Fluxo da tela
@@ -43,7 +45,7 @@ docker run --rm -p 3000:3000 -e DATABASE_URL="mariadb://usuario:senha@host-remot
    - `lan_lanope` (plano/tipo de operacao)
    - `lan_idmin` (ministerio)
 4. Conferir as colunas auxiliares do extrato (`aux_extrato_desc`, `aux_extrato_dc`) e preencher `lan_deslan`.
-5. Clicar em `Salvar na cadlan2`.
+5. Salvar os apontamentos pelo botao de salvar de cada linha.
 6. Conferir os dados.
 7. Selecionar na grade as linhas ja salvas em `cadlan2` e clicar em `Confirmar selecionadas e enviar para cadlan` para copiar somente esse subconjunto mantendo a `cadlan2`.
 

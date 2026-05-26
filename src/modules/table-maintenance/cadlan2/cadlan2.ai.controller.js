@@ -1,4 +1,5 @@
 const service = require("./cadlan2.ai.service");
+const { assertOperationPassword } = require("../../shared/operationPassword");
 
 async function getStatus(req, res, next) {
   try {
@@ -11,6 +12,7 @@ async function getStatus(req, res, next) {
 
 async function suggestRows(req, res, next) {
   try {
+    assertOperationPassword(req.body);
     const result = await service.suggestCadlan2Rows(req.body);
     res.json({
       message: "Sugestoes de IA geradas com sucesso.",

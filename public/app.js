@@ -19,6 +19,7 @@ const state = {
     globalWarnings: [],
     rowMap: new Map(),
     overwrite: false,
+    operationPassword: "",
   },
 };
 
@@ -51,6 +52,9 @@ function setAiPanelVisible(visible) {
 
   state.controls.aiPanel.hidden = !visible;
   state.controls.aiSuggest.setAttribute("aria-expanded", visible ? "true" : "false");
+  if (!visible) {
+    state.ai.operationPassword = "";
+  }
 }
 
 function escapeHtml(value) {
@@ -411,6 +415,96 @@ async function requestJson(path, options = {}) {
   }
 
   return payload;
+}
+
+function requestOperationPassword(actionLabel) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "password-dialog-backdrop";
+
+    const dialog = document.createElement("form");
+    dialog.className = "password-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+
+    const title = document.createElement("h2");
+    title.className = "password-dialog-title";
+    title.textContent = "Confirmar operacao";
+
+    const message = document.createElement("p");
+    message.className = "password-dialog-copy";
+    message.textContent = `Digite a senha para continuar: ${actionLabel}.`;
+
+    const input = document.createElement("input");
+    input.className = "password-dialog-input";
+    input.type = "password";
+    input.autocomplete = "current-password";
+    input.placeholder = "Senha";
+    input.setAttribute("aria-label", "Senha de confirmacao");
+
+    const error = document.createElement("div");
+    error.className = "password-dialog-error";
+    error.setAttribute("role", "alert");
+
+    const actions = document.createElement("div");
+    actions.className = "password-dialog-actions";
+
+    const cancelButton = document.createElement("button");
+    cancelButton.className = "btn btn-ghost";
+    cancelButton.type = "button";
+    cancelButton.textContent = "Cancelar";
+
+    const confirmButton = document.createElement("button");
+    confirmButton.className = "btn btn-primary";
+    confirmButton.type = "submit";
+    confirmButton.textContent = "Confirmar";
+
+    actions.append(cancelButton, confirmButton);
+    dialog.append(title, message, input, error, actions);
+    backdrop.append(dialog);
+
+    function close(password) {
+      document.removeEventListener("keydown", handleKeyDown);
+      backdrop.remove();
+      resolve(password);
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        close(null);
+      }
+    }
+
+    dialog.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const password = input.value;
+      if (!password) {
+        error.textContent = "Informe a senha para continuar.";
+        input.focus();
+        return;
+      }
+
+      close(password);
+    });
+
+    cancelButton.addEventListener("click", () => close(null));
+    backdrop.addEventListener("mousedown", (event) => {
+      if (event.target === backdrop) {
+        close(null);
+      }
+    });
+    document.addEventListener("keydown", handleKeyDown);
+
+    document.body.append(backdrop);
+    input.focus();
+  });
+}
+
+async function verifyOperationPassword(operationPassword) {
+  await requestJson("/operation-password/verify", {
+    method: "POST",
+    body: JSON.stringify({ operationPassword }),
+  });
 }
 
 function buildLookupMap(items) {
@@ -1759,16 +1853,31 @@ function handleAddRow() {
   persistUnsavedRowsToLocalStorage();
 }
 
-function handleDeleteRows() {
+async function handleDeleteRows() {
   const selectedRows = getActiveSelectedRows();
   if (selectedRows.length === 0) {
     setStatus("Selecione ao menos uma linha para exclusao.");
     return;
   }
 
-  selectedRows.forEach((row) => row.delete());
-  persistUnsavedRowsToLocalStorage();
-  setStatus(`${selectedRows.length} linha(s) removida(s) da grade.`);
+  const operationPassword = await requestOperationPassword("Excluir linhas selecionadas");
+  if (operationPassword === null) {
+    return;
+  }
+
+  setBusy(true);
+  setStatus("Validando senha para exclusao...");
+
+  try {
+    await verifyOperationPassword(operationPassword);
+    selectedRows.forEach((row) => row.delete());
+    persistUnsavedRowsToLocalStorage();
+    setStatus(`${selectedRows.length} linha(s) removida(s) da grade.`, "success");
+  } catch (error) {
+    setStatus(error.message, "error");
+  } finally {
+    setBusy(false);
+  }
 }
 
 function getSelectedSavedCadlan2RowIds() {
@@ -1878,6 +1987,11 @@ async function handleCommit() {
     return;
   }
 
+  const operationPassword = await requestOperationPassword("Confirmar selecionadas e enviar para cadlan");
+  if (operationPassword === null) {
+    return;
+  }
+
   setBusy(true);
   setStatus(`Confirmando ${selectedSavedRowIds.length} registro(s) selecionado(s) para cadlan...`);
 
@@ -1886,6 +2000,7 @@ async function handleCommit() {
       method: "POST",
       body: JSON.stringify({
         selectedIds: selectedSavedRowIds,
+        operationPassword,
       }),
     });
 
@@ -1974,12 +2089,35 @@ async function handleImportFileSelected(event) {
   }
 }
 
-function handleAiPanelToggle() {
+async function handleAiPanelToggle() {
   if (!state.ai.enabled) {
     return;
   }
 
-  setAiPanelVisible(state.controls.aiPanel.hidden);
+  if (!state.controls.aiPanel.hidden) {
+    setAiPanelVisible(false);
+    return;
+  }
+
+  const operationPassword = await requestOperationPassword("Sugerir via IA");
+  if (operationPassword === null) {
+    return;
+  }
+
+  setBusy(true);
+  setStatus("Validando senha para sugestao via IA...");
+
+  try {
+    await verifyOperationPassword(operationPassword);
+    state.ai.operationPassword = operationPassword;
+    setAiPanelVisible(true);
+    setStatus("Senha confirmada. Configure e gere as sugestoes via IA.", "success");
+  } catch (error) {
+    state.ai.operationPassword = "";
+    setStatus(error.message, "error");
+  } finally {
+    setBusy(false);
+  }
 }
 
 function handleAiPanelClose() {
@@ -1989,6 +2127,14 @@ function handleAiPanelClose() {
 async function handleAiGenerateSuggestions() {
   if (!state.ai.enabled) {
     return;
+  }
+
+  let operationPassword = state.ai.operationPassword;
+  if (!operationPassword) {
+    operationPassword = await requestOperationPassword("Gerar sugestoes via IA");
+    if (operationPassword === null) {
+      return;
+    }
   }
 
   let aiRequest;
@@ -2010,6 +2156,7 @@ async function handleAiGenerateSuggestions() {
         scope: aiRequest.scope,
         overwrite: aiRequest.overwrite,
         rows: aiRequest.rows,
+        operationPassword,
       }),
     });
 

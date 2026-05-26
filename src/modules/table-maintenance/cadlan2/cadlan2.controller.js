@@ -1,4 +1,5 @@
 const service = require("./cadlan2.service");
+const { assertOperationPassword } = require("../../shared/operationPassword");
 
 async function listRows(req, res, next) {
   try {
@@ -37,6 +38,7 @@ async function saveRow(req, res, next) {
 
 async function commitBatch(req, res, next) {
   try {
+    assertOperationPassword(req.body);
     const result = await service.commitCadlan2Batch(req.body);
     res.json({
       message: "Registros selecionados enviados para cadlan com sucesso.",
