@@ -1098,7 +1098,7 @@ function createGrid(lookups, rows) {
     resizableColumnFit: true,
     layoutColumnsOnNewData: false,
     persistenceMode: "local",
-    persistenceID: "cadlan2-grid-layout-v20260526-5",
+    persistenceID: "cadlan2-grid-layout-v20260526-6",
     persistence: {
       columns: true,
     },
@@ -1160,7 +1160,7 @@ function createGrid(lookups, rows) {
           isSavedCadlan2Row(data) ? "Sim" : "Não",
       },
       {
-        title: "Mebro",
+        title: "Membro",
         field: "lan_idmem",
         width: 220,
         editor: lookupComboboxEditor,
