@@ -2077,6 +2077,26 @@ function handleClearDateFilters() {
   applyGridFilters();
 }
 
+function formatDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function setDefaultDateFilters() {
+  if (!state.controls.dateFrom || !state.controls.dateTo) {
+    return;
+  }
+
+  const today = new Date();
+  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  state.controls.dateFrom.value = formatDateInputValue(firstDayOfMonth);
+  state.controls.dateTo.value = formatDateInputValue(today);
+}
+
 function bindControls() {
   state.controls.reload = document.getElementById("reloadButton");
   state.controls.exportExcel = document.getElementById("exportExcelButton");
@@ -2100,6 +2120,8 @@ function bindControls() {
   state.controls.dateFrom = document.getElementById("dateFromFilter");
   state.controls.dateTo = document.getElementById("dateToFilter");
   state.controls.clearDateFilter = document.getElementById("clearDateFilterButton");
+
+  setDefaultDateFilters();
 
   state.controls.reload.addEventListener("click", handleReload);
   state.controls.exportExcel.addEventListener("click", handleExportExcel);
