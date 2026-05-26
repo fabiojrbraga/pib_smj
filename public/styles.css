@@ -361,6 +361,32 @@ h1 {
   background: rgba(6, 121, 90, 0.18);
 }
 
+.row-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.row-status-saved {
+  border-color: rgba(6, 121, 90, 0.34);
+  background: rgba(11, 143, 106, 0.12);
+  color: #08694f;
+}
+
+.row-status-local {
+  border-color: rgba(178, 118, 0, 0.34);
+  background: rgba(245, 164, 0, 0.14);
+  color: #7a4d00;
+}
+
 .assistant-panel {
   margin: 0 0 14px;
   padding: 16px;

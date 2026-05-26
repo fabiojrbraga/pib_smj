@@ -1021,6 +1021,14 @@ function saveButtonFormatter(cell) {
   `;
 }
 
+function statusFormatter(cell) {
+  const isSaved = isSavedCadlan2Row(cell.getRow().getData());
+  const label = isSaved ? "Salvo" : "Somente local";
+  const statusClass = isSaved ? "row-status row-status-saved" : "row-status row-status-local";
+
+  return `<span class="${statusClass}">${label}</span>`;
+}
+
 function applySavedRowClass(rowComponent) {
   const rowElement = rowComponent.getElement();
   if (!rowElement) {
@@ -1079,7 +1087,7 @@ function createGrid(lookups, rows) {
       minWidth: 110,
       resizable: true,
     },
-    selectableRows: true,
+    selectableRows: "highlight",
     clipboard: true,
     clipboardPasteParser: "range",
     clipboardPasteAction: "replace",
@@ -1098,12 +1106,13 @@ function createGrid(lookups, rows) {
       width: 54,
       resizable: false,
       cellClick: (event, cell) => {
+        event.stopPropagation();
         cell.getRow().toggleSelect();
       },
     },
     columns: [
       {
-        title: "",
+        title: "Salvar",
         field: "__save",
         width: 78,
         minWidth: 78,
@@ -1120,7 +1129,19 @@ function createGrid(lookups, rows) {
         },
       },
       {
-        title: "lan_idmem",
+        title: "Status",
+        field: "__saved_in_cadlan2",
+        width: 140,
+        minWidth: 130,
+        hozAlign: "center",
+        headerSort: true,
+        resizable: false,
+        formatter: statusFormatter,
+        accessorDownload: (value, data) =>
+          isSavedCadlan2Row(data) ? "Salvo" : "Somente local",
+      },
+      {
+        title: "Membro",
         field: "lan_idmem",
         width: 220,
         editor: lookupComboboxEditor,
@@ -1159,32 +1180,32 @@ function createGrid(lookups, rows) {
         },
       },
       {
-        title: "lan_datlan",
+        title: "Data",
         field: "lan_datlan",
         width: 140,
         editor: "date",
       },
       {
-        title: "aux_extrato_dc",
+        title: "Debito/Credito",
         field: "aux_extrato_dc",
         width: 140,
         hozAlign: "center",
       },
       {
-        title: "aux_extrato_desc",
+        title: "Descricao do extrato",
         field: "aux_extrato_desc",
         width: 440,
         formatter: auxDescriptionFormatter,
         headerFilter: "input",
       },
       {
-        title: "aux_extrato_fitid",
+        title: "ID do extrato",
         field: "aux_extrato_fitid",
         width: 190,
         headerFilter: "input",
       },
       {
-        title: "lan_deslan",
+        title: "Descricao",
         field: "lan_deslan",
         width: 440,
         editor: "input",
@@ -1192,7 +1213,7 @@ function createGrid(lookups, rows) {
         headerFilter: "input",
       },
       {
-        title: "lan_valor",
+        title: "Valor",
         field: "lan_valor",
         width: 180,
         editor: "input",
@@ -1202,7 +1223,7 @@ function createGrid(lookups, rows) {
         bottomCalcFormatter: (cell) => formatMoney(cell.getValue()),
       },
       {
-        title: "lan_lanope",
+        title: "Operacao",
         field: "lan_lanope",
         width: 280,
         editor: "list",
@@ -1219,7 +1240,7 @@ function createGrid(lookups, rows) {
         headerFilter: "input",
       },
       {
-        title: "lan_idmin",
+        title: "Ministerio",
         field: "lan_idmin",
         width: 250,
         editor: lookupComboboxEditor,
