@@ -1057,6 +1057,22 @@ function auxDescriptionFormatter(cell) {
   return content;
 }
 
+function formatDateForDisplay(value) {
+  const textValue = String(value || "").trim();
+  const isoDate = textValue.slice(0, 10);
+
+  if (!isIsoDate(isoDate)) {
+    return textValue;
+  }
+
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function dateDisplayFormatter(cell) {
+  return formatDateForDisplay(cell.getValue());
+}
+
 function createGrid(lookups, rows) {
   const memberOptions = buildLookupOptions(lookups.members);
   const ministryOptions = buildLookupOptions(lookups.ministries);
@@ -1082,7 +1098,7 @@ function createGrid(lookups, rows) {
     resizableColumnFit: true,
     layoutColumnsOnNewData: false,
     persistenceMode: "local",
-    persistenceID: "cadlan2-grid-layout-v20260526-4",
+    persistenceID: "cadlan2-grid-layout-v20260526-5",
     persistence: {
       columns: true,
     },
@@ -1187,11 +1203,14 @@ function createGrid(lookups, rows) {
         field: "lan_datlan",
         width: 140,
         editor: "date",
+        formatter: dateDisplayFormatter,
+        accessorDownload: (value) => formatDateForDisplay(value),
       },
       {
         title: "Déb/Créd",
         field: "aux_extrato_dc",
-        width: 140,
+        width: 86,
+        minWidth: 78,
         hozAlign: "center",
       },
       {
