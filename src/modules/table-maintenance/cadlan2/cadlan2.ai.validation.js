@@ -41,7 +41,7 @@ function normalizeOptionalInteger() {
         return value;
       }
 
-      return parsed;
+      return parsed > 0 ? parsed : null;
     },
     z.number().int().positive().nullable()
   );
