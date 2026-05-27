@@ -15,6 +15,26 @@ const {
 
 const OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_TOOL_NAME = "return_cadlan2_suggestions";
+const AI_LOG_TEXT_LIMIT = 8000;
+
+function truncateForLog(value, limit = AI_LOG_TEXT_LIMIT) {
+  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  if (text.length <= limit) {
+    return text;
+  }
+
+  return `${text.slice(0, limit)}... [truncated ${text.length - limit} chars]`;
+}
+
+function logInvalidAiResponse(context) {
+  console.error("[cadlan2-ai] Resposta invalida recebida da IA", {
+    model: context.model || null,
+    finishReason: context.finishReason || null,
+    validationDetails: context.validationDetails || null,
+    rawArguments: truncateForLog(context.rawArguments || ""),
+    parsedArguments: context.parsedArguments ? truncateForLog(context.parsedArguments) : null,
+  });
+}
 
 function clampConfidence(value) {
   const parsed = Number(value);
@@ -142,15 +162,36 @@ async function callOpenAiForSuggestions({ lookups, prompt, overwrite, rows }) {
     env.ai.timeoutMs
   );
 
-  const toolCall = payload?.choices?.[0]?.message?.tool_calls?.find(
+  const choice = payload?.choices?.[0] || {};
+  const toolCall = choice?.message?.tool_calls?.find(
     (item) => item?.type === "function" && item?.function?.name === OPENAI_TOOL_NAME
   );
 
   if (!toolCall?.function?.arguments) {
+    console.error("[cadlan2-ai] OpenAI nao retornou tool call estruturada", {
+      model: payload?.model || null,
+      finishReason: choice?.finish_reason || null,
+      message: truncateForLog(choice?.message || {}),
+    });
     throw new AppError("A OpenAI nao retornou sugestoes estruturadas.", 502);
   }
 
-  return validateCadlan2AiRawResponse(parseJson(toolCall.function.arguments));
+  const rawArguments = toolCall.function.arguments;
+  const parsedArguments = parseJson(rawArguments);
+
+  try {
+    return validateCadlan2AiRawResponse(parsedArguments);
+  } catch (error) {
+    logInvalidAiResponse({
+      model: payload?.model,
+      finishReason: choice?.finish_reason,
+      validationDetails: error.details,
+      rawArguments,
+      parsedArguments,
+    });
+
+    throw error;
+  }
 }
 
 function buildLookupSets(lookups) {

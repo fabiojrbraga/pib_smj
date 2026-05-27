@@ -204,7 +204,21 @@ function validateCadlan2AiRawResponse(payload) {
   const parsed = rawResponseSchema.safeParse(payload);
 
   if (!parsed.success) {
-    throw new ValidationError("Resposta invalida recebida da IA", parsed.error.flatten());
+    const flattened = parsed.error.flatten();
+    const invalidFields = Object.keys(flattened.fieldErrors || {});
+    const details = {
+      ...flattened,
+      issues: parsed.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      })),
+    };
+    const fieldSummary = invalidFields.length > 0 ? ` Campos invalidos: ${invalidFields.join(", ")}.` : "";
+
+    throw new ValidationError(
+      `Resposta invalida recebida da IA.${fieldSummary} Verifique os logs do servidor para ver o payload retornado.`,
+      details
+    );
   }
 
   return parsed.data;
