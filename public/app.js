@@ -2313,6 +2313,10 @@ function handleFilterControlChanged() {
 function handleClearDateFilters() {
   state.controls.dateFrom.value = "";
   state.controls.dateTo.value = "";
+  if (state.controls.periodMonth) {
+    state.controls.periodMonth.value = "";
+  }
+  updatePeriodRangeLabel();
   applyGridFilters();
 }
 
@@ -2324,16 +2328,91 @@ function formatDateInputValue(date) {
   return `${year}-${month}-${day}`;
 }
 
+function formatMonthInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
+function parseMonthInputValue(value) {
+  const [yearText, monthText] = String(value || "").split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    return null;
+  }
+
+  return new Date(year, month - 1, 1);
+}
+
+function getMonthDateRange(monthDate) {
+  return {
+    from: new Date(monthDate.getFullYear(), monthDate.getMonth(), 1),
+    to: new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0),
+  };
+}
+
+function setDateFilterRange(fromDate, toDate) {
+  state.controls.dateFrom.value = formatDateInputValue(fromDate);
+  state.controls.dateTo.value = formatDateInputValue(toDate);
+  updatePeriodRangeLabel();
+}
+
+function updatePeriodRangeLabel() {
+  if (!state.controls.periodRange) {
+    return;
+  }
+
+  const from = normalizeIsoDateForFilter(state.controls.dateFrom?.value);
+  const to = normalizeIsoDateForFilter(state.controls.dateTo?.value);
+
+  state.controls.periodRange.textContent = from && to
+    ? `${formatDateForDisplay(from)} a ${formatDateForDisplay(to)}`
+    : "Sem filtro de período";
+}
+
+function applyPeriodMonth(monthValue) {
+  const monthDate = parseMonthInputValue(monthValue);
+  if (!monthDate || !state.controls.periodMonth) {
+    return;
+  }
+
+  state.controls.periodMonth.value = formatMonthInputValue(monthDate);
+  const dateRange = getMonthDateRange(monthDate);
+  setDateFilterRange(dateRange.from, dateRange.to);
+  applyGridFilters();
+}
+
+function handlePeriodMonthChanged() {
+  if (!state.controls.periodMonth?.value) {
+    handleClearDateFilters();
+    return;
+  }
+
+  applyPeriodMonth(state.controls.periodMonth.value);
+}
+
+function handlePeriodMonthNavigation(offset) {
+  const baseDate =
+    parseMonthInputValue(state.controls.periodMonth?.value) ||
+    parseMonthInputValue(formatMonthInputValue(new Date()));
+
+  const targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + offset, 1);
+  applyPeriodMonth(formatMonthInputValue(targetDate));
+}
+
 function setDefaultDateFilters() {
-  if (!state.controls.dateFrom || !state.controls.dateTo) {
+  if (!state.controls.dateFrom || !state.controls.dateTo || !state.controls.periodMonth) {
     return;
   }
 
   const today = new Date();
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-  state.controls.dateFrom.value = formatDateInputValue(firstDayOfMonth);
-  state.controls.dateTo.value = formatDateInputValue(today);
+  state.controls.periodMonth.value = formatMonthInputValue(today);
+  setDateFilterRange(firstDayOfMonth, today);
 }
 
 function bindControls() {
@@ -2356,6 +2435,10 @@ function bindControls() {
   state.controls.commit = document.getElementById("commitButton");
   state.controls.ofxFile = document.getElementById("ofxFileInput");
   state.controls.showSaved = document.getElementById("showSavedCheckbox");
+  state.controls.periodMonth = document.getElementById("periodMonthFilter");
+  state.controls.periodPrev = document.getElementById("periodPrevButton");
+  state.controls.periodNext = document.getElementById("periodNextButton");
+  state.controls.periodRange = document.getElementById("periodRangeLabel");
   state.controls.dateFrom = document.getElementById("dateFromFilter");
   state.controls.dateTo = document.getElementById("dateToFilter");
   state.controls.clearDateFilter = document.getElementById("clearDateFilterButton");
@@ -2376,8 +2459,9 @@ function bindControls() {
   state.controls.commit.addEventListener("click", handleCommit);
   state.controls.ofxFile.addEventListener("change", handleImportFileSelected);
   state.controls.showSaved.addEventListener("change", handleFilterControlChanged);
-  state.controls.dateFrom.addEventListener("change", handleFilterControlChanged);
-  state.controls.dateTo.addEventListener("change", handleFilterControlChanged);
+  state.controls.periodMonth.addEventListener("change", handlePeriodMonthChanged);
+  state.controls.periodPrev.addEventListener("click", () => handlePeriodMonthNavigation(-1));
+  state.controls.periodNext.addEventListener("click", () => handlePeriodMonthNavigation(1));
   state.controls.clearDateFilter.addEventListener("click", handleClearDateFilters);
 }
 
