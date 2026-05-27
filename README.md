@@ -53,6 +53,20 @@ docker run --rm -p 3000:3000 -e DATABASE_URL="mariadb://usuario:senha@host-remot
 
 Ja existe um catalogo/registro de tabelas em `src/modules/table-maintenance/tableRegistry.js` para permitir adicionar novas telas de manutencao futuramente sem alterar a base principal.
 
+## Ignorar descricoes no OFX
+
+Use `DESC_TO_IGNORE_IN_OFX` para ignorar transacoes cuja descricao OFX seja exatamente igual a um dos valores configurados.
+
+Formato simples:
+```env
+DESC_TO_IGNORE_IN_OFX=APLICAÇÃO RDC|RESGATE RDC
+```
+
+Formato recomendado quando houver acentos, espacos ou muitos valores:
+```env
+DESC_TO_IGNORE_IN_OFX=["APLICAÇÃO RDC","RESGATE RDC"]
+```
+
 ## IA generativa opcional
 
 O preenchimento assistido por IA e totalmente opcional e nao interfere no fluxo tradicional da grid.

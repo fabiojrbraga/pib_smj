@@ -1,4 +1,5 @@
 const express = require("express");
+const appConfigController = require("./modules/app-config/appConfig.controller");
 const lookupsController = require("./modules/lookups/lookups.controller");
 const tableMaintenanceController = require("./modules/table-maintenance/tableMaintenance.controller");
 const cadlan2Controller = require("./modules/table-maintenance/cadlan2/cadlan2.controller");
@@ -12,6 +13,7 @@ router.get("/health", (req, res) => {
 });
 
 router.get("/maintenance/catalog", tableMaintenanceController.getMaintenanceCatalog);
+router.get("/app-config", appConfigController.getClientConfig);
 router.get("/lookups", lookupsController.getLookups);
 router.post("/operation-password/verify", operationPasswordController.verifyOperationPassword);
 

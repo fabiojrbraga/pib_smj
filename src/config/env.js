@@ -33,6 +33,29 @@ function parseOptionalPositiveIntegerEnv(name, defaultValue) {
   return parsed;
 }
 
+function parseDelimitedTextListEnv(name) {
+  const rawValue = getOptionalEnv(name);
+  if (!rawValue) {
+    return [];
+  }
+
+  if (rawValue.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item).trim()).filter((item) => item);
+      }
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return rawValue
+    .split("|")
+    .map((item) => item.trim())
+    .filter((item) => item);
+}
+
 function parseDatabaseUrl() {
   const databaseUrl = getRequiredEnv("DATABASE_URL");
   let parsedUrl;
@@ -99,6 +122,7 @@ const env = {
   port: Number(process.env.PORT || 3000),
   dbConfig: parseDatabaseUrl(),
   operationConfirmationPassword: getOptionalEnv("OPERATION_CONFIRMATION_PASSWORD"),
+  ofxDescriptionsToIgnore: parseDelimitedTextListEnv("DESC_TO_IGNORE_IN_OFX"),
   ai: parseAiConfig(),
 };
 

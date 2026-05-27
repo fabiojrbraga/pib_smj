@@ -5,6 +5,9 @@ const COMBOBOX_NAV_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter"]);
 
 const state = {
   lookups: null,
+  config: {
+    ofxDescriptionsToIgnore: [],
+  },
   table: null,
   busy: false,
   controls: {},
@@ -1583,12 +1586,26 @@ function buildOfxDescription(transactionBlock) {
   return "";
 }
 
+function shouldIgnoreOfxDescription(...descriptions) {
+  if (!Array.isArray(state.config.ofxDescriptionsToIgnore)) {
+    return false;
+  }
+
+  const descriptionsToIgnore = new Set(state.config.ofxDescriptionsToIgnore);
+
+  return descriptions
+    .map((description) => String(description || "").trim())
+    .filter((description) => description)
+    .some((description) => descriptionsToIgnore.has(description));
+}
+
 function parseOfxTransactions(ofxText) {
   const normalizedOfx = String(ofxText || "").replace(/\r\n/g, "\n");
   const transactionMatches = [...normalizedOfx.matchAll(/<STMTTRN>([\s\S]*?)(?=<STMTTRN>|<\/BANKTRANLIST>|$)/gi)];
   const importedFitIds = buildImportedFitIdSet();
   const newRows = [];
   let skippedImportedCount = 0;
+  let skippedIgnoredDescriptionCount = 0;
 
   transactionMatches.forEach((match) => {
     const transactionBlock = match[1];
@@ -1597,10 +1614,17 @@ function parseOfxTransactions(ofxText) {
     const postedDate = extractTagValue(transactionBlock, "DTPOSTED");
     const userDate = extractTagValue(transactionBlock, "DTUSER");
     const date = parseOfxDate(postedDate || userDate);
+    const name = extractTagValue(transactionBlock, "NAME");
+    const memo = extractTagValue(transactionBlock, "MEMO");
     const description = buildOfxDescription(transactionBlock);
     const fitId = normalizeExtractFitId(extractTagValue(transactionBlock, "FITID"));
 
     if (!Number.isFinite(amount) || amount === 0) {
+      return;
+    }
+
+    if (shouldIgnoreOfxDescription(description, name, memo)) {
+      skippedIgnoredDescriptionCount += 1;
       return;
     }
 
@@ -1631,6 +1655,7 @@ function parseOfxTransactions(ofxText) {
   return {
     rows: newRows,
     skippedImportedCount,
+    skippedIgnoredDescriptionCount,
   };
 }
 
@@ -1778,10 +1803,11 @@ function collectRowsForSave() {
 }
 
 async function fetchLookupsAndRows() {
-  const [lookupsResult, cadlan2Result, aiStatusResult] = await Promise.allSettled([
+  const [lookupsResult, cadlan2Result, aiStatusResult, configResult] = await Promise.allSettled([
     requestJson("/lookups"),
     requestJson("/cadlan2"),
     requestJson("/cadlan2/ai/status"),
+    requestJson("/app-config"),
   ]);
 
   if (lookupsResult.status !== "fulfilled") {
@@ -1796,6 +1822,10 @@ async function fetchLookupsAndRows() {
   const cadlan2Data = cadlan2Result.value;
 
   state.lookups = lookups;
+  state.config.ofxDescriptionsToIgnore =
+    configResult.status === "fulfilled" && Array.isArray(configResult.value?.ofxDescriptionsToIgnore)
+      ? configResult.value.ofxDescriptionsToIgnore
+      : [];
   setAiAvailability(aiStatusResult.status === "fulfilled" ? aiStatusResult.value : null);
   resetAiSuggestions();
 
@@ -2045,6 +2075,24 @@ function handleExportExcel() {
   setStatus(`Download do arquivo ${fileName} iniciado.`, "success");
 }
 
+function formatOfxImportSkipMessage(skippedImportedCount, skippedIgnoredDescriptionCount) {
+  const messages = [];
+
+  if (skippedImportedCount > 0) {
+    messages.push(
+      `${skippedImportedCount} transacao(oes) ja existente(s) na grade/cadlan2 foram ignorada(s).`
+    );
+  }
+
+  if (skippedIgnoredDescriptionCount > 0) {
+    messages.push(
+      `${skippedIgnoredDescriptionCount} transacao(oes) com descricao ignorada no .env foram ignorada(s).`
+    );
+  }
+
+  return messages.length > 0 ? ` ${messages.join(" ")}` : "";
+}
+
 async function handleImportFileSelected(event) {
   const [file] = event.target.files || [];
   if (!file) {
@@ -2056,12 +2104,19 @@ async function handleImportFileSelected(event) {
 
   try {
     const fileText = await readTextFileWithFallback(file);
-    const { rows: importedRows, skippedImportedCount } = parseOfxTransactions(fileText);
+    const {
+      rows: importedRows,
+      skippedImportedCount,
+      skippedIgnoredDescriptionCount,
+    } = parseOfxTransactions(fileText);
 
     if (importedRows.length === 0) {
-      if (skippedImportedCount > 0) {
+      if (skippedImportedCount > 0 || skippedIgnoredDescriptionCount > 0) {
         setStatus(
-          `Nenhum novo lancamento foi importado. ${skippedImportedCount} transacao(oes) ja existente(s) na grade/cadlan2 foram ignorada(s).`,
+          `Nenhum novo lancamento foi importado.${formatOfxImportSkipMessage(
+            skippedImportedCount,
+            skippedIgnoredDescriptionCount
+          )}`,
           "success"
         );
         return;
@@ -2075,9 +2130,7 @@ async function handleImportFileSelected(event) {
     applyGridFilters();
     setStatus(
       `${importedRows.length} lancamento(s) importado(s).${
-        skippedImportedCount > 0
-          ? ` ${skippedImportedCount} transacao(oes) ja existente(s) na grade/cadlan2 foram ignorada(s).`
-          : ""
+        formatOfxImportSkipMessage(skippedImportedCount, skippedIgnoredDescriptionCount)
       } Preencha lan_deslan e demais campos obrigatorios antes de salvar.`,
       "success"
     );
