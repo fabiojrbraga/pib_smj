@@ -88,7 +88,7 @@ function setAiAvailability(payload = null) {
     };
   }
 
-  if (!state.controls.aiSuggest || !state.controls.aiPanel) {
+  if (!state.controls.aiSuggest) {
     return;
   }
 
@@ -2144,13 +2144,45 @@ async function handleImportFileSelected(event) {
   }
 }
 
+async function applyAiSuggestionsToGrid(suggestions, rowMap, overwrite) {
+  state.ai.suggestions = Array.isArray(suggestions) ? suggestions : [];
+  state.ai.globalWarnings = [];
+  state.ai.rowMap = rowMap;
+  state.ai.overwrite = overwrite;
+
+  let updatedRows = 0;
+  let updatedFields = 0;
+
+  for (const suggestion of state.ai.suggestions) {
+    const result = await applySingleAiSuggestion(suggestion);
+    if (!result.updated) {
+      continue;
+    }
+
+    updatedRows += 1;
+    updatedFields += result.updatedFields;
+  }
+
+  persistUnsavedRowsToLocalStorage();
+  applyGridFilters();
+
+  return {
+    updatedRows,
+    updatedFields,
+    analyzedRows: state.ai.suggestions.length,
+  };
+}
+
 async function handleAiPanelToggle() {
   if (!state.ai.enabled) {
     return;
   }
 
-  if (!state.controls.aiPanel.hidden) {
-    setAiPanelVisible(false);
+  let aiRequest;
+  try {
+    aiRequest = collectRowsForAiSuggestion();
+  } catch (error) {
+    setStatus(error.message, "error");
     return;
   }
 
@@ -2160,15 +2192,39 @@ async function handleAiPanelToggle() {
   }
 
   setBusy(true);
-  setStatus("Validando senha para sugestao via IA...");
+  setStatus(`Gerando e aplicando sugestoes de IA para ${aiRequest.rows.length} linha(s)...`);
 
   try {
-    await verifyOperationPassword(operationPassword);
-    state.ai.operationPassword = operationPassword;
-    setAiPanelVisible(true);
-    setStatus("Senha confirmada. Configure e gere as sugestoes via IA.", "success");
+    const payload = await requestJson("/cadlan2/ai/suggest", {
+      method: "POST",
+      body: JSON.stringify({
+        prompt: aiRequest.prompt,
+        scope: aiRequest.scope,
+        overwrite: aiRequest.overwrite,
+        rows: aiRequest.rows,
+        operationPassword,
+      }),
+    });
+
+    const result = await applyAiSuggestionsToGrid(
+      payload.suggestions,
+      aiRequest.rowMap,
+      aiRequest.overwrite
+    );
+
+    if (result.updatedRows === 0) {
+      setStatus(
+        `IA analisou ${result.analyzedRows} linha(s), mas nao trouxe alteracoes aplicaveis no modo atual.`
+      );
+      return;
+    }
+
+    setStatus(
+      `IA analisou ${result.analyzedRows} linha(s) e atualizou ${result.updatedRows} linha(s) com ${result.updatedFields} campo(s). Revise e salve as linhas alteradas.`,
+      "success"
+    );
   } catch (error) {
-    state.ai.operationPassword = "";
+    resetAiSuggestions();
     setStatus(error.message, "error");
   } finally {
     setBusy(false);
@@ -2215,15 +2271,15 @@ async function handleAiGenerateSuggestions() {
       }),
     });
 
-    state.ai.suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
-    state.ai.globalWarnings = Array.isArray(payload.globalWarnings) ? payload.globalWarnings : [];
-    state.ai.rowMap = aiRequest.rowMap;
-    state.ai.overwrite = aiRequest.overwrite;
-    renderAiSuggestions();
-    setAiPanelVisible(true);
+    const result = await applyAiSuggestionsToGrid(
+      payload.suggestions,
+      aiRequest.rowMap,
+      aiRequest.overwrite
+    );
+
     setStatus(
-      `${payload.message || "Sugestoes de IA geradas."} ${state.ai.suggestions.length} linha(s) analisada(s).`,
-      "success"
+      `IA analisou ${result.analyzedRows} linha(s) e atualizou ${result.updatedRows} linha(s) com ${result.updatedFields} campo(s). Revise e salve as linhas alteradas.`,
+      result.updatedRows > 0 ? "success" : "info"
     );
   } catch (error) {
     resetAiSuggestions();
@@ -2449,10 +2505,10 @@ function bindControls() {
   state.controls.exportExcel.addEventListener("click", handleExportExcel);
   state.controls.import.addEventListener("click", handleImportClick);
   state.controls.aiSuggest.addEventListener("click", handleAiPanelToggle);
-  state.controls.aiClose.addEventListener("click", handleAiPanelClose);
-  state.controls.aiRun.addEventListener("click", handleAiGenerateSuggestions);
-  state.controls.aiApply.addEventListener("click", handleAiApplySuggestions);
-  state.controls.aiResults.addEventListener("click", handleAiResultsClick);
+  state.controls.aiClose?.addEventListener("click", handleAiPanelClose);
+  state.controls.aiRun?.addEventListener("click", handleAiGenerateSuggestions);
+  state.controls.aiApply?.addEventListener("click", handleAiApplySuggestions);
+  state.controls.aiResults?.addEventListener("click", handleAiResultsClick);
   state.controls.add.addEventListener("click", handleAddRow);
   state.controls.remove.addEventListener("click", handleDeleteRows);
   state.controls.save?.addEventListener("click", handleSave);
