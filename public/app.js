@@ -1227,7 +1227,7 @@ function createGrid(lookups, rows) {
     resizableColumnFit: true,
     layoutColumnsOnNewData: false,
     persistenceMode: "local",
-    persistenceID: "cadlan2-grid-layout-v20260526-10",
+    persistenceID: "cadlan2-grid-layout-v20260527-2",
     persistence: {
       columns: true,
     },
@@ -1364,8 +1364,8 @@ function createGrid(lookups, rows) {
       {
         title: "Valor",
         field: "lan_valor",
-        width: 108,
-        minWidth: 98,
+        width: 76,
+        minWidth: 76,
         editor: "input",
         hozAlign: "right",
         formatter: (cell) => formatMoney(cell.getValue()),
@@ -1375,7 +1375,8 @@ function createGrid(lookups, rows) {
       {
         title: "Conta",
         field: "lan_lanope",
-        width: 280,
+        width: 196,
+        minWidth: 180,
         editor: "list",
         editorParams: (cell) => {
           const rowData = cell.getRow().getData();
@@ -1392,7 +1393,8 @@ function createGrid(lookups, rows) {
       {
         title: "Ministério",
         field: "lan_idmin",
-        width: 250,
+        width: 175,
+        minWidth: 160,
         editor: lookupComboboxEditor,
         editorParams: (cell) => ({
           values: ministryOptions,
