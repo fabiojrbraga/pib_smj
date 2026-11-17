@@ -94,7 +94,10 @@ function postJson(url, body, headers, timeoutMs) {
               payload?.message ||
               "Falha ao consultar a OpenAI para gerar sugestoes.";
 
-            reject(new AppError(apiMessage, 502, payload?.error || null));
+            const error = new AppError(apiMessage, 502, payload?.error || null);
+            error.providerStatus = response.statusCode;
+            error.providerCode = payload?.error?.code || payload?.error?.type || null;
+            reject(error);
             return;
           }
 
@@ -108,11 +111,11 @@ function postJson(url, body, headers, timeoutMs) {
     });
 
     request.on("error", (error) => {
-      reject(
-        error instanceof AppError
-          ? error
-          : new AppError(error.message || "Falha ao consultar a OpenAI.", 502)
-      );
+      const requestError = error instanceof AppError
+        ? error
+        : new AppError(error.message || "Falha ao consultar a OpenAI.", 502);
+      requestError.networkCode = error.code || null;
+      reject(requestError);
     });
 
     request.write(requestBody);
@@ -272,73 +275,85 @@ async function getCadlan2AiStatus() {
 }
 
 async function suggestCadlan2Rows(payload) {
-  if (!env.ai.enabled) {
-    throw new AppError("Funcionalidade de IA nao configurada neste ambiente.", 503, {
-      enabled: false,
-      message: env.ai.statusMessage,
-    });
-  }
-
-  const request = validateCadlan2AiSuggestRequest(payload);
-  if (request.rows.length > env.ai.maxRowsPerRequest) {
-    throw new AppError(
-      `Limite de ${env.ai.maxRowsPerRequest} linha(s) por solicitacao de IA excedido.`,
-      422
-    );
-  }
-
-  const lookups = await lookupsService.getAllLookups();
-  const rowsWithExamples = await Promise.all(
-    request.rows.map(async (row) => ({
-      ...row,
-      similarExamples: await repository.findSimilarCadlan2Rows(row, {
-        limit: env.ai.maxExamplesPerRow,
-      }),
-    }))
-  );
-
-  const rawResponse = await callOpenAiForSuggestions({
-    lookups,
-    prompt: request.prompt,
-    overwrite: request.overwrite,
-    rows: rowsWithExamples,
-  });
-
-  const suggestionsByRowId = new Map(
-    rawResponse.suggestions.map((item) => [item.clientRowId, item])
-  );
-  const lookupSets = buildLookupSets(lookups);
-
-  const suggestions = rowsWithExamples.map((row) => {
-    const rawSuggestion = suggestionsByRowId.get(row.clientRowId);
-
-    if (!rawSuggestion) {
-      return {
-        clientRowId: row.clientRowId,
-        suggestedFields: {
-          lan_deslan: null,
-          lan_lanope: null,
-          lan_idmin: null,
-        },
-        confidence: 0,
-        reason: "A IA nao retornou sugestao para esta linha.",
-        warnings: ["Nenhuma sugestao estruturada foi recebida para esta linha."],
-        supportingExamples: row.similarExamples,
-      };
+  let stage = "configuracao";
+  try {
+    if (!env.ai.enabled) {
+      throw new AppError("Funcionalidade de IA nao configurada neste ambiente.", 503, {
+        enabled: false,
+        message: env.ai.statusMessage,
+      });
     }
 
-    return buildNormalizedSuggestion(rawSuggestion, row, lookupSets);
-  });
+    stage = "validacao da requisicao";
+    const request = validateCadlan2AiSuggestRequest(payload);
+    if (request.rows.length > env.ai.maxRowsPerRequest) {
+      throw new AppError(
+        `Limite de ${env.ai.maxRowsPerRequest} linha(s) por solicitacao de IA excedido.`,
+        422
+      );
+    }
 
-  return {
-    suggestions,
-    globalWarnings: rawResponse.globalWarnings,
-    meta: {
-      model: env.ai.model,
-      rowsAnalyzed: rowsWithExamples.length,
-      promptProvided: Boolean(String(request.prompt || "").trim()),
-    },
-  };
+    stage = "consulta de dados auxiliares";
+    const lookups = await lookupsService.getAllLookups();
+    stage = "busca de exemplos";
+    const rowsWithExamples = await Promise.all(
+      request.rows.map(async (row) => ({
+        ...row,
+        similarExamples: await repository.findSimilarCadlan2Rows(row, {
+          limit: env.ai.maxExamplesPerRow,
+        }),
+      }))
+    );
+
+    stage = "consulta e validacao da resposta da OpenAI";
+    const rawResponse = await callOpenAiForSuggestions({
+      lookups,
+      prompt: request.prompt,
+      overwrite: request.overwrite,
+      rows: rowsWithExamples,
+    });
+
+    stage = "processamento das sugestoes";
+    const suggestionsByRowId = new Map(
+      rawResponse.suggestions.map((item) => [item.clientRowId, item])
+    );
+    const lookupSets = buildLookupSets(lookups);
+
+    const suggestions = rowsWithExamples.map((row) => {
+      const rawSuggestion = suggestionsByRowId.get(row.clientRowId);
+
+      if (!rawSuggestion) {
+        return {
+          clientRowId: row.clientRowId,
+          suggestedFields: {
+            lan_deslan: null,
+            lan_lanope: null,
+            lan_idmin: null,
+          },
+          confidence: 0,
+          reason: "A IA nao retornou sugestao para esta linha.",
+          warnings: ["Nenhuma sugestao estruturada foi recebida para esta linha."],
+          supportingExamples: row.similarExamples,
+        };
+      }
+
+      return buildNormalizedSuggestion(rawSuggestion, row, lookupSets);
+    });
+
+    return {
+      suggestions,
+      globalWarnings: rawResponse.globalWarnings,
+      meta: {
+        model: env.ai.model,
+        rowsAnalyzed: rowsWithExamples.length,
+        promptProvided: Boolean(String(request.prompt || "").trim()),
+      },
+    };
+  } catch (error) {
+    error.aiStage = stage;
+    error.aiModel = env.ai.model;
+    throw error;
+  }
 }
 
 module.exports = {

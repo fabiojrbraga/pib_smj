@@ -11,8 +11,10 @@ async function getStatus(req, res, next) {
 }
 
 async function suggestRows(req, res, next) {
+  let stage = "senha de confirmacao";
   try {
     assertOperationPassword(req.body);
+    stage = "geracao de sugestoes";
     const result = await service.suggestCadlan2Rows(req.body);
     res.json({
       message: "Sugestoes de IA geradas com sucesso.",
@@ -21,6 +23,16 @@ async function suggestRows(req, res, next) {
       meta: result.meta,
     });
   } catch (error) {
+    console.error("[cadlan2-ai] Falha ao gerar sugestoes", {
+      stage: error.aiStage || stage,
+      status: error.statusCode || 500,
+      errorType: error.name,
+      message: error.message,
+      providerStatus: error.providerStatus || null,
+      providerCode: error.providerCode || null,
+      networkCode: error.networkCode || null,
+      model: error.aiModel || null,
+    });
     next(error);
   }
 }
