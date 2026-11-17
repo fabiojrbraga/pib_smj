@@ -14,6 +14,7 @@ const {
 } = require("./cadlan2.ai.prompt");
 
 const OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_TOOL_NAME = "return_cadlan2_suggestions";
 const AI_LOG_TEXT_LIMIT = 8000;
 
@@ -124,19 +125,8 @@ function postJson(url, body, headers, timeoutMs) {
 }
 
 async function callOpenAiForSuggestions({ lookups, prompt, overwrite, rows }) {
-  const requestBody = {
-    model: env.ai.model,
-    ...(/^gpt-6(?:[.-]|$)/.test(env.ai.model) ? { reasoning_effort: "none" } : {}),
-    temperature: 0.2,
-    parallel_tool_calls: false,
-    tool_choice: {
-      type: "function",
-      function: {
-        name: OPENAI_TOOL_NAME,
-      },
-    },
-    tools: [buildSuggestionToolDefinition()],
-    messages: [
+  const useResponses = /^gpt-6(?:[.-]|$)/.test(env.ai.model);
+  const messages = [
       {
         role: "system",
         content: env.ai.systemPrompt,
@@ -154,11 +144,29 @@ async function callOpenAiForSuggestions({ lookups, prompt, overwrite, rows }) {
           rows,
         }),
       },
-    ],
-  };
+    ];
+  const tool = buildSuggestionToolDefinition();
+  const requestBody = useResponses
+    ? {
+        model: env.ai.model,
+        reasoning: { effort: "low" },
+        store: false,
+        parallel_tool_calls: false,
+        tool_choice: { type: "function", name: OPENAI_TOOL_NAME },
+        tools: [{ type: "function", ...tool.function, strict: false }],
+        input: messages,
+      }
+    : {
+        model: env.ai.model,
+        temperature: 0.2,
+        parallel_tool_calls: false,
+        tool_choice: { type: "function", function: { name: OPENAI_TOOL_NAME } },
+        tools: [tool],
+        messages,
+      };
 
   const payload = await postJson(
-    OPENAI_CHAT_COMPLETIONS_URL,
+    useResponses ? OPENAI_RESPONSES_URL : OPENAI_CHAT_COMPLETIONS_URL,
     requestBody,
     {
       Authorization: `Bearer ${env.ai.apiKey}`,
@@ -167,20 +175,22 @@ async function callOpenAiForSuggestions({ lookups, prompt, overwrite, rows }) {
   );
 
   const choice = payload?.choices?.[0] || {};
-  const toolCall = choice?.message?.tool_calls?.find(
-    (item) => item?.type === "function" && item?.function?.name === OPENAI_TOOL_NAME
-  );
+  const toolCall = useResponses
+    ? payload?.output?.find((item) => item?.type === "function_call" && item?.name === OPENAI_TOOL_NAME)
+    : choice?.message?.tool_calls?.find(
+        (item) => item?.type === "function" && item?.function?.name === OPENAI_TOOL_NAME
+      );
+  const rawArguments = useResponses ? toolCall?.arguments : toolCall?.function?.arguments;
 
-  if (!toolCall?.function?.arguments) {
+  if (!rawArguments) {
     console.error("[cadlan2-ai] OpenAI nao retornou tool call estruturada", {
       model: payload?.model || null,
-      finishReason: choice?.finish_reason || null,
-      message: truncateForLog(choice?.message || {}),
+      finishReason: (useResponses ? payload?.status : choice?.finish_reason) || null,
+      message: truncateForLog((useResponses ? payload?.output : choice?.message) || {}),
     });
     throw new AppError("A OpenAI nao retornou sugestoes estruturadas.", 502);
   }
 
-  const rawArguments = toolCall.function.arguments;
   const parsedArguments = parseJson(rawArguments);
 
   try {
@@ -188,7 +198,7 @@ async function callOpenAiForSuggestions({ lookups, prompt, overwrite, rows }) {
   } catch (error) {
     logInvalidAiResponse({
       model: payload?.model,
-      finishReason: choice?.finish_reason,
+      finishReason: useResponses ? payload?.status : choice?.finish_reason,
       validationDetails: error.details,
       rawArguments,
       parsedArguments,
