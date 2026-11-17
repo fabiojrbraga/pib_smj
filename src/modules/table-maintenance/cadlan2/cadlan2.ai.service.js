@@ -126,6 +126,7 @@ function postJson(url, body, headers, timeoutMs) {
 async function callOpenAiForSuggestions({ lookups, prompt, overwrite, rows }) {
   const requestBody = {
     model: env.ai.model,
+    ...(env.ai.model.startsWith("gpt-6.1") ? { reasoning_effort: "none" } : {}),
     temperature: 0.2,
     parallel_tool_calls: false,
     tool_choice: {
